@@ -1,0 +1,269 @@
+---
+pid: 32144
+cwd: |
+  C:\Users\Rayadurai\.cursor
+active_command: npm run dev
+last_command: npm run setup
+last_exit_code: 0
+---
+PS C:\Users\Rayadurai\.cursor> npm run setup 
+
+> leadrouter@1.0.0 setup
+> node server/db/setup.js
+
+🚀 Starting database setup...
+
+✅ Connected to PostgreSQL server
+ℹ️  Database leadrouter already exists
+✅ Connected to database: leadrouter
+
+📋 Running migrations...
+✅ Migrations completed
+
+🌱 Seeding initial data...
+✅ Admin user created/updated
+   Email: admin@leadrouter.com
+   Password: admin123 (change in production!)
+
+✅ BDR user created/updated
+   Email: bdr@leadrouter.com
+   Password: bdr123 (change in production!)
+
+ℹ️  Reps already exist, skipping sample data
+
+🎉 Database setup completed successfully!
+
+Next steps:
+   1. Start the server: npm run dev
+   2. Open http://localhost:3000
+   3. Login with admin@leadrouter.com / admin123
+PS C:\Users\Rayadurai\.cursor>    npm run dev
+
+> leadrouter@1.0.0 dev
+> concurrently "npm run dev:server" "npm run dev:client"
+
+(node:30352) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[1] 
+[1] > leadrouter@1.0.0 dev:client
+[1] > cd client && npm start
+[1]
+[0]
+[0] > leadrouter@1.0.0 dev:server
+[0] > nodemon server/index.js
+[0]
+[0] [nodemon] 3.1.11
+[0] [nodemon] to restart at any time, enter `rs`
+[0] [nodemon] watching path(s): *.*
+[0] [nodemon] watching extensions: js,mjs,cjs,json
+[0] [nodemon] starting `node server/index.js`
+[1] 
+[1] > leadrouter-client@1.0.0 start
+[1] > react-scripts start
+[1]
+[0] node:events:486
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use :::3001        
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+[0]     at listenInCluster (node:net:1997:12)
+[0]     at Server.listen (node:net:2102:7)
+[0]     at app.listen (C:\Users\Rayadurai\.cursor\node_modules\express\lib\application.js:635:24)
+[0]     at Object.<anonymous> (C:\Users\Rayadurai\.cursor\server\index.js:81:5)
+[0]     at Module._compile (node:internal/modules/cjs/loader:1761:14)
+[0]     at Object..js (node:internal/modules/cjs/loader:1893:10)    
+[0]     at Module.load (node:internal/modules/cjs/loader:1481:32)   
+[0]     at Module._load (node:internal/modules/cjs/loader:1300:12)  
+[0]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1976:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::',
+[0]   port: 3001
+[0] }
+[0]
+[0] Node.js v24.13.0
+[0] [nodemon] app crashed - waiting for file changes before starting...
+[1] (node:14316) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+[1] (Use `node --trace-deprecation ...` to show where the warning was created)
+[1] Something is already running on port 3000.
+[1] npm run dev:client exited with code 0
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] node:events:486
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use :::3001        
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+[0]     at listenInCluster (node:net:1997:12)
+[0]     at Server.listen (node:net:2102:7)
+[0]     at app.listen (C:\Users\Rayadurai\.cursor\node_modules\express\lib\application.js:635:24)
+[0]     at Object.<anonymous> (C:\Users\Rayadurai\.cursor\server\index.js:81:5)
+[0]     at Module._compile (node:internal/modules/cjs/loader:1761:14)
+[0]     at Object..js (node:internal/modules/cjs/loader:1893:10)    
+[0]     at Module.load (node:internal/modules/cjs/loader:1481:32)   
+[0]     at Module._load (node:internal/modules/cjs/loader:1300:12)  
+[0]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1976:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::',
+[0]   port: 3001
+[0] }
+[0]
+[0] Node.js v24.13.0
+[0] [nodemon] app crashed - waiting for file changes before starting...
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] node:events:486
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use :::3001        
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+[0]     at listenInCluster (node:net:1997:12)
+[0]     at Server.listen (node:net:2102:7)
+[0]     at app.listen (C:\Users\Rayadurai\.cursor\node_modules\express\lib\application.js:635:24)
+[0]     at Object.<anonymous> (C:\Users\Rayadurai\.cursor\server\index.js:110:5)
+[0]     at Module._compile (node:internal/modules/cjs/loader:1761:14)
+[0]     at Object..js (node:internal/modules/cjs/loader:1893:10)    
+[0]     at Module.load (node:internal/modules/cjs/loader:1481:32)   
+[0]     at Module._load (node:internal/modules/cjs/loader:1300:12)  
+[0]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1976:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::',
+[0]   port: 3001
+[0] }
+[0]
+[0] Node.js v24.13.0
+[0] [nodemon] app crashed - waiting for file changes before starting...
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] node:events:486
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use :::3001        
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+[0]     at listenInCluster (node:net:1997:12)
+[0]     at Server.listen (node:net:2102:7)
+[0]     at app.listen (C:\Users\Rayadurai\.cursor\node_modules\express\lib\application.js:635:24)
+[0]     at Object.<anonymous> (C:\Users\Rayadurai\.cursor\server\index.js:110:5)
+[0]     at Module._compile (node:internal/modules/cjs/loader:1761:14)
+[0]     at Object..js (node:internal/modules/cjs/loader:1893:10)    
+[0]     at Module.load (node:internal/modules/cjs/loader:1481:32)   
+[0]     at Module._load (node:internal/modules/cjs/loader:1300:12)  
+[0]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1976:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::',
+[0]   port: 3001
+[0] }
+[0]
+[0] Node.js v24.13.0
+[0] [nodemon] app crashed - waiting for file changes before starting...
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] node:events:486
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use :::3001        
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+[0]     at listenInCluster (node:net:1997:12)
+[0]     at Server.listen (node:net:2102:7)
+[0]     at app.listen (C:\Users\Rayadurai\.cursor\node_modules\express\lib\application.js:635:24)
+[0]     at Object.<anonymous> (C:\Users\Rayadurai\.cursor\server\index.js:110:5)
+[0]     at Module._compile (node:internal/modules/cjs/loader:1761:14)
+[0]     at Object..js (node:internal/modules/cjs/loader:1893:10)    
+[0]     at Module.load (node:internal/modules/cjs/loader:1481:32)   
+[0]     at Module._load (node:internal/modules/cjs/loader:1300:12)  
+[0]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1976:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::',
+[0]   port: 3001
+[0] }
+[0]
+[0] Node.js v24.13.0
+[0] [nodemon] app crashed - waiting for file changes before starting...
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] 🚀 LeadRouter server running on port 3001
+[0] 📊 Environment: development
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] restarting due to changes...
+[0] [nodemon] starting `node server/index.js`
+[0] node:events:486
+[0]       throw er; // Unhandled 'error' event
+[0]       ^
+[0]
+[0] Error: listen EADDRINUSE: address already in use :::3001        
+[0]     at Server.setupListenHandle [as _listen2] (node:net:1940:16)
+[0]     at listenInCluster (node:net:1997:12)
+[0]     at Server.listen (node:net:2102:7)
+[0]     at app.listen (C:\Users\Rayadurai\.cursor\node_modules\express\lib\application.js:635:24)
+[0]     at Object.<anonymous> (C:\Users\Rayadurai\.cursor\server\index.js:110:5)
+[0]     at Module._compile (node:internal/modules/cjs/loader:1761:14)
+[0]     at Object..js (node:internal/modules/cjs/loader:1893:10)    
+[0]     at Module.load (node:internal/modules/cjs/loader:1481:32)   
+[0]     at Module._load (node:internal/modules/cjs/loader:1300:12)  
+[0]     at TracingChannel.traceSync (node:diagnostics_channel:328:14)
+[0] Emitted 'error' event on Server instance at:
+[0]     at emitErrorNT (node:net:1976:8)
+[0]     at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+[0]   code: 'EADDRINUSE',
+[0]   errno: -4091,
+[0]   syscall: 'listen',
+[0]   address: '::',
+[0]   port: 3001
+[0] }
+[0]
+[0] Node.js v24.13.0
+[0] [nodemon] app crashed - waiting for file changes before starting...

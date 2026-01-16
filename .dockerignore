@@ -1,0 +1,16 @@
+node_modules
+client/node_modules
+client/build
+.env
+.env.local
+.git
+.gitignore
+README.md
+DEPLOYMENT.md
+QUICKSTART.md
+*.log
+.DS_Store
+.vscode
+.idea
+
+
