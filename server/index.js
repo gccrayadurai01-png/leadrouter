@@ -16,8 +16,9 @@ const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // Trust proxy - required for Render and other reverse proxies
-// This allows Express to correctly identify client IPs from X-Forwarded-For headers
-app.set('trust proxy', true);
+// Set to 1 to only trust the first proxy (Render's load balancer)
+// This prevents IP-based rate limiting bypass while still allowing correct IP detection
+app.set('trust proxy', 1);
 
 // Middleware
 app.use(helmet({

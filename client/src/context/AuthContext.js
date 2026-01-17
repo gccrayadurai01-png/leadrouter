@@ -61,13 +61,22 @@ export function AuthProvider({ children }) {
       // Verify token is still valid by fetching user
       fetchUser();
     } else {
-      // No token - set mock user for development/bypass mode
-      setUser({
-        id: '1',
-        email: 'admin@leadrouter.com',
-        role: 'admin',
-        name: 'Admin User'
-      });
+      // No token - in production, require login
+      // Only set mock user in development (localhost)
+      const isDevelopment = typeof window !== 'undefined' && 
+                           (window.location.hostname === 'localhost' || 
+                            window.location.hostname === '127.0.0.1');
+      
+      if (isDevelopment) {
+        // Development: set mock user for easier testing
+        setUser({
+          id: '1',
+          email: 'admin@leadrouter.com',
+          role: 'admin',
+          name: 'Admin User'
+        });
+      }
+      // Production: leave user as null to trigger login redirect
       setLoading(false);
     }
   }, []);
