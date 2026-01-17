@@ -87,15 +87,28 @@ app.get('/health', async (req, res) => {
     // Check database connection
     const pool = require('./db');
     await pool.query('SELECT 1');
+    
+    // Check if users table exists and has data
+    let usersCount = 0;
+    try {
+      const usersResult = await pool.query('SELECT COUNT(*) as count FROM users');
+      usersCount = parseInt(usersResult.rows[0].count);
+    } catch (err) {
+      // Table might not exist
+    }
+    
     res.json({ 
       status: 'ok', 
       database: 'connected',
+      usersTableExists: usersCount > 0,
+      usersCount: usersCount,
       timestamp: new Date().toISOString() 
     });
   } catch (error) {
     res.status(503).json({ 
       status: 'error', 
       database: 'disconnected',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined,
       timestamp: new Date().toISOString() 
     });
   }

@@ -104,6 +104,9 @@ function requireBDR(req, res, next) {
  * Generate JWT token
  */
 function generateToken(userId, role) {
+  if (!JWT_SECRET || JWT_SECRET === 'change-this-secret-in-production') {
+    console.error('WARNING: JWT_SECRET is not set or using default value!');
+  }
   return jwt.sign({ userId, role }, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN });
 }
 
