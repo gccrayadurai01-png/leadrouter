@@ -4,7 +4,9 @@
 FROM node:18-alpine AS client-builder
 WORKDIR /app/client
 COPY client/package*.json ./
-RUN npm ci
+# Use npm install instead of npm ci to handle lock file mismatches
+# npm ci is stricter and requires perfect sync between package.json and package-lock.json
+RUN npm install --legacy-peer-deps || npm install
 COPY client/ ./
 RUN npm run build
 

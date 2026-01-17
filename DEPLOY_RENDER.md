@@ -19,6 +19,21 @@ Complete guide for deploying LeadRouter to Render.com.
    git push origin main
    ```
 
+### Step 1.5: Choose Build Method
+
+**Option A: Native Node.js Build (Recommended) ✅**
+- Faster builds
+- Simpler configuration
+- Better for Node.js apps
+- No Docker needed
+
+**Option B: Docker Build**
+- Use if you need specific system dependencies
+- More control over environment
+- Slower builds
+
+**We recommend Option A (Native Node.js)** - see configuration below.
+
 ### Step 2: Create PostgreSQL Database on Render
 
 1. Go to [Render Dashboard](https://dashboard.render.com)
@@ -46,8 +61,12 @@ Complete guide for deploying LeadRouter to Render.com.
    - **Root Directory**: Leave empty (root of repo)
 
    **Build & Deploy:**
+   - **Environment**: `Node` (not Docker)
    - **Build Command**: `npm install && npm run build`
    - **Start Command**: `npm run start`
+   - **Node Version**: `18` (or latest)
+   
+   **⚠️ Important**: Make sure "Docker" is NOT selected. Use native Node.js build instead.
 
    **Environment Variables:**
    Add these variables (click "Add Environment Variable"):
@@ -172,6 +191,23 @@ Before going live, ensure:
 - [ ] HTTPS is enabled (automatic on Render)
 
 ## 🐛 Troubleshooting
+
+### Docker Build Issues
+
+**If you're using Docker and getting `npm ci` errors:**
+
+The Dockerfile has been updated to handle this, but you can also:
+
+1. **Switch to Native Node.js Build** (Recommended):
+   - In Render dashboard → Settings → Build & Deploy
+   - Remove Docker detection
+   - Set Build Command: `npm install && npm run build`
+   - Set Start Command: `npm run start`
+
+2. **Or fix Docker build:**
+   - The Dockerfile now uses `npm install` instead of `npm ci`
+   - Regenerate lock file: `cd client && npm install`
+   - Commit and push: `git add client/package-lock.json && git commit -m "Update lock file" && git push`
 
 ### Build Fails
 
