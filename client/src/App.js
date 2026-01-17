@@ -7,28 +7,50 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import './App.css';
 
 function ProtectedRoute({ children, requireAdmin = false }) {
-  // Bypass protection - allow direct access
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/login" />;
+  }
+
+  if (requireAdmin && user.role !== 'admin') {
+    return <Navigate to="/dashboard" />;
+  }
+
   return children;
 }
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
 
-  // Bypass login - create mock user for direct access
-  const mockUser = user || { id: '1', email: 'admin@leadrouter.com', role: 'admin', name: 'Admin User' };
+  if (loading) {
+    return <div className="flex items-center justify-center min-h-screen">Loading...</div>;
+  }
 
   return (
     <Routes>
-      <Route path="/login" element={<Navigate to="/admin" />} />
+      <Route path="/login" element={!user ? <Login /> : <Navigate to={user.role === 'admin' ? '/admin' : '/dashboard'} />} />
       <Route
         path="/admin/*"
-        element={<AdminDashboard />}
+        element={
+          <ProtectedRoute requireAdmin={true}>
+            <AdminDashboard />
+          </ProtectedRoute>
+        }
       />
       <Route
         path="/dashboard"
-        element={<BDRDashboard />}
+        element={
+          <ProtectedRoute>
+            <BDRDashboard />
+          </ProtectedRoute>
+        }
       />
-      <Route path="/" element={<Navigate to="/admin" />} />
+      <Route path="/" element={<Navigate to={user ? (user.role === 'admin' ? '/admin' : '/dashboard') : '/login'} />} />
     </Routes>
   );
 }
