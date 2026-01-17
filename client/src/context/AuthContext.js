@@ -3,7 +3,10 @@ import axios from 'axios';
 
 const AuthContext = createContext();
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// Use empty string for relative paths in production, localhost for development
+const API_URL = process.env.REACT_APP_API_URL !== undefined 
+  ? process.env.REACT_APP_API_URL 
+  : 'http://localhost:3001';
 
 export function AuthProvider({ children }) {
   // Bypass auth - set mock user for direct access

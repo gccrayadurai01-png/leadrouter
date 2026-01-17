@@ -8,7 +8,10 @@ import AssignmentsHistory from './admin/AssignmentsHistory';
 import AuditLogs from './admin/AuditLogs';
 import QueueStats from './admin/QueueStats';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// Use empty string for relative paths in production, localhost for development
+const API_URL = process.env.REACT_APP_API_URL !== undefined 
+  ? process.env.REACT_APP_API_URL 
+  : 'http://localhost:3001';
 
 // Mock user for direct access
 const mockUser = { id: '1', email: 'admin@leadrouter.com', role: 'admin', name: 'Admin User' };

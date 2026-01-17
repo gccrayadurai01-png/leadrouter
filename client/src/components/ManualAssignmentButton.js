@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { useToast } from '../hooks/useToast';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// Use empty string for relative paths in production, localhost for development
+const API_URL = process.env.REACT_APP_API_URL !== undefined 
+  ? process.env.REACT_APP_API_URL 
+  : 'http://localhost:3001';
 
 function ManualAssignmentButton({ queue, reps, onSuccess }) {
   const [showModal, setShowModal] = useState(false);
