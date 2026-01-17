@@ -8,9 +8,21 @@ import ManualAssignmentButton from './ManualAssignmentButton';
 import { useToast } from '../hooks/useToast';
 
 // Use empty string for relative paths in production, localhost for development
-const API_URL = process.env.REACT_APP_API_URL !== undefined 
-  ? process.env.REACT_APP_API_URL 
-  : 'http://localhost:3001';
+// Handle both undefined and empty string cases
+const getApiUrl = () => {
+  const envUrl = process.env.REACT_APP_API_URL;
+  // If explicitly set (even if empty string), use it
+  if (envUrl !== undefined) {
+    return envUrl;
+  }
+  // If running on production domain (not localhost), use relative paths
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return '';
+  }
+  // Default to localhost for development
+  return 'http://localhost:3001';
+};
+const API_URL = getApiUrl();
 
 // Mock user for direct access
 const mockUser = { id: '1', email: 'bdr@leadrouter.com', role: 'bdr', name: 'BDR User' };
