@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 
 // Use empty string for relative paths in production, localhost for development
-// Use empty string for relative paths in production, localhost for development
 // Handle both undefined and empty string cases
 const getApiUrl = () => {
   const envUrl = process.env.REACT_APP_API_URL;
@@ -35,6 +34,7 @@ function ManualAssignment() {
 
   useEffect(() => {
     fetchReps();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData.queue]);
 
   const fetchReps = async () => {

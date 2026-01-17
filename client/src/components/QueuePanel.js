@@ -25,7 +25,6 @@ function QueuePanel({ queue, nextRep, loading, assigning, onAssign }) {
 
   const { rep, totalActiveReps, totalActiveWeight } = nextRep;
 
-  const queueColor = queue === 'SMB' ? 'blue' : 'purple';
   const borderColor = queue === 'SMB' ? 'border-blue-500' : 'border-purple-500';
   const bgGradient = queue === 'SMB' 
     ? 'from-blue-500 to-blue-600' 

@@ -1,30 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { Routes, Route, Link, useLocation, Navigate } from 'react-router-dom';
-import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import RepsManagement from './admin/RepsManagement';
 import ManualAssignment from './admin/ManualAssignment';
 import AssignmentsHistory from './admin/AssignmentsHistory';
 import AuditLogs from './admin/AuditLogs';
 import QueueStats from './admin/QueueStats';
-
-// Use empty string for relative paths in production, localhost for development
-// Use empty string for relative paths in production, localhost for development
-// Handle both undefined and empty string cases
-const getApiUrl = () => {
-  const envUrl = process.env.REACT_APP_API_URL;
-  // If explicitly set (even if empty string), use it
-  if (envUrl !== undefined) {
-    return envUrl;
-  }
-  // If running on production domain (not localhost), use relative paths
-  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-    return '';
-  }
-  // Default to localhost for development
-  return 'http://localhost:3001';
-};
-const API_URL = getApiUrl();
 
 // Mock user for direct access
 const mockUser = { id: '1', email: 'admin@leadrouter.com', role: 'admin', name: 'Admin User' };

@@ -17,18 +17,20 @@ services:
       # Frontend API URL - empty string means use relative paths (same origin)
       - key: REACT_APP_API_URL
         value: ""
-      # Database configuration - using your own PostgreSQL
-      # IMPORTANT: Replace localhost with your PostgreSQL server's public IP or hostname
-      - key: DB_HOST
-        sync: false  # You'll set this manually in Render dashboard
-      - key: DB_PORT
-        value: "5432"
-      - key: DB_NAME
-        value: "leadrouter"
-      - key: DB_USER
-        sync: false  # You'll set this manually in Render dashboard
-      - key: DB_PASSWORD
-        sync: false  # You'll set this manually in Render dashboard (mark as secret!)
+      # Database configuration - using Render PostgreSQL
+      # Option 1: Link database in Render dashboard (recommended)
+      # Go to: Service → Settings → Databases → Link Database
+      # This automatically adds DATABASE_URL environment variable
+      # Option 2: Use fromDatabase syntax below (if database name is 'leadrouter-db')
+      - key: DATABASE_URL
+        fromDatabase:
+          name: leadrouter-db
+          property: connectionString
     healthCheckPath: /health
 
-# No Render database - using your own PostgreSQL server
+# Render PostgreSQL Database
+# Create a PostgreSQL database in Render Dashboard:
+# 1. Go to Dashboard → New → PostgreSQL
+# 2. Name it: leadrouter-db
+# 3. Link it to your web service (auto-adds DATABASE_URL)
+# OR manually add DATABASE_URL from database's Internal Database URL
