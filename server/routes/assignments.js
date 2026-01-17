@@ -65,7 +65,7 @@ router.post('/assign/:queue', requireBDR, async (req, res) => {
  * POST /api/assignments/manual
  * Manually assign a lead to a specific rep (Admin only)
  */
-router.post('/manual', async (req, res) => {
+router.post('/manual', requireAdmin, async (req, res) => {
   try {
     const { repId, queue, hubspotContactId, hubspotDealId, companyName, companyDomain, metadata } = req.body;
     
@@ -238,14 +238,32 @@ router.get('/dashboard-stats', requireBDR, async (req, res) => {
     const { fromDate, toDate } = req.query;
     const pool = require('../db');
     
-    // Build date filter clause
+    // Validate date format (YYYY-MM-DD)
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (fromDate && !dateRegex.test(fromDate)) {
+      return res.status(400).json({ error: 'Invalid fromDate format. Use YYYY-MM-DD' });
+    }
+    if (toDate && !dateRegex.test(toDate)) {
+      return res.status(400).json({ error: 'Invalid toDate format. Use YYYY-MM-DD' });
+    }
+    
+    // Build date filter with parameterized queries
     let dateFilterClause = '';
+    const dateParams = [];
+    let paramCount = 1;
+    
     if (fromDate && toDate) {
-      dateFilterClause = `AND assigned_at >= '${fromDate}'::date AND assigned_at <= '${toDate}'::date + INTERVAL '1 day'`;
+      dateFilterClause = `AND assigned_at >= $${paramCount}::date AND assigned_at <= $${paramCount + 1}::date + INTERVAL '1 day'`;
+      dateParams.push(fromDate, toDate);
+      paramCount += 2;
     } else if (fromDate) {
-      dateFilterClause = `AND assigned_at >= '${fromDate}'::date`;
+      dateFilterClause = `AND assigned_at >= $${paramCount}::date`;
+      dateParams.push(fromDate);
+      paramCount += 1;
     } else if (toDate) {
-      dateFilterClause = `AND assigned_at <= '${toDate}'::date + INTERVAL '1 day'`;
+      dateFilterClause = `AND assigned_at <= $${paramCount}::date + INTERVAL '1 day'`;
+      dateParams.push(toDate);
+      paramCount += 1;
     }
     
     const smbStats = await pool.query(`
@@ -258,7 +276,7 @@ router.get('/dashboard-stats', requireBDR, async (req, res) => {
         COUNT(*) FILTER (WHERE assigned_at > NOW() - INTERVAL '7 days') as week
       FROM assignments
       WHERE queue = 'SMB' ${dateFilterClause}
-    `);
+    `, dateParams);
     
     const entStats = await pool.query(`
       SELECT 
@@ -270,16 +288,25 @@ router.get('/dashboard-stats', requireBDR, async (req, res) => {
         COUNT(*) FILTER (WHERE assigned_at > NOW() - INTERVAL '7 days') as week
       FROM assignments
       WHERE queue = 'ENT' ${dateFilterClause}
-    `);
+    `, dateParams);
     
-    // Get rep breakdown for charts (include inactive reps)
+    // Get rep breakdown for charts (include inactive reps) - using parameterized queries
     let repDateFilter = '';
+    const repDateParams = [];
+    let repParamCount = 1;
+    
     if (fromDate && toDate) {
-      repDateFilter = `AND a.assigned_at >= '${fromDate}'::date AND a.assigned_at <= '${toDate}'::date + INTERVAL '1 day'`;
+      repDateFilter = `AND a.assigned_at >= $${repParamCount}::date AND a.assigned_at <= $${repParamCount + 1}::date + INTERVAL '1 day'`;
+      repDateParams.push(fromDate, toDate);
+      repParamCount += 2;
     } else if (fromDate) {
-      repDateFilter = `AND a.assigned_at >= '${fromDate}'::date`;
+      repDateFilter = `AND a.assigned_at >= $${repParamCount}::date`;
+      repDateParams.push(fromDate);
+      repParamCount += 1;
     } else if (toDate) {
-      repDateFilter = `AND a.assigned_at <= '${toDate}'::date + INTERVAL '1 day'`;
+      repDateFilter = `AND a.assigned_at <= $${repParamCount}::date + INTERVAL '1 day'`;
+      repDateParams.push(toDate);
+      repParamCount += 1;
     }
     
     const smbRepBreakdown = await pool.query(`
@@ -292,7 +319,7 @@ router.get('/dashboard-stats', requireBDR, async (req, res) => {
       WHERE r.queue = 'SMB'
       GROUP BY r.id, r.name, r.active
       ORDER BY r.active DESC, count DESC, r.name
-    `);
+    `, repDateParams);
     
     const entRepBreakdown = await pool.query(`
       SELECT 
@@ -304,7 +331,7 @@ router.get('/dashboard-stats', requireBDR, async (req, res) => {
       WHERE r.queue = 'ENT'
       GROUP BY r.id, r.name, r.active
       ORDER BY r.active DESC, count DESC, r.name
-    `);
+    `, repDateParams);
     
     res.json({
       smb: {

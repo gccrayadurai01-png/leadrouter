@@ -85,6 +85,27 @@ app.use('/api/hubspot', require('./routes/hubspot').router);
 const buildPath = path.join(__dirname, '../client/build');
 const buildExists = fs.existsSync(buildPath);
 
+// Root route handler (only if React app is not built)
+if (!buildExists) {
+  app.get('/', (req, res) => {
+    res.json({
+      message: 'LeadRouter API Server',
+      status: 'running',
+      environment: process.env.NODE_ENV || 'development',
+      buildAvailable: false,
+      apiEndpoints: {
+        health: '/health',
+        auth: '/api/auth',
+        reps: '/api/reps',
+        assignments: '/api/assignments',
+        audit: '/api/audit',
+        hubspot: '/api/hubspot'
+      },
+      note: 'React app build not found. Run "npm run build" to build the client application.'
+    });
+  });
+}
+
 if (isProduction || buildExists) {
   if (buildExists) {
     app.use(express.static(buildPath));
@@ -110,7 +131,14 @@ app.use((err, req, res, next) => {
 // 404 handler (only if React app is not being served)
 if (!isProduction && !buildExists) {
   app.use((req, res) => {
-    res.status(404).json({ error: 'Route not found' });
+    res.status(404).json({ 
+      error: 'Route not found',
+      availableRoutes: {
+        root: '/',
+        health: '/health',
+        api: '/api/*'
+      }
+    });
   });
 }
 
