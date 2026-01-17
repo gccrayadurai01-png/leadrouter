@@ -9,6 +9,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -80,15 +81,22 @@ app.use('/api/assignments', require('./routes/assignments'));
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api/hubspot', require('./routes/hubspot').router);
 
-// Serve React app in production
-if (isProduction) {
-  const buildPath = path.join(__dirname, '../client/build');
-  app.use(express.static(buildPath));
-  
-  // Serve React app for all non-API routes
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(buildPath, 'index.html'));
-  });
+// Serve React app in production or if build exists
+const buildPath = path.join(__dirname, '../client/build');
+const buildExists = fs.existsSync(buildPath);
+
+if (isProduction || buildExists) {
+  if (buildExists) {
+    app.use(express.static(buildPath));
+    
+    // Serve React app for all non-API routes
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(buildPath, 'index.html'));
+    });
+  } else if (isProduction) {
+    console.warn('⚠️  Production mode but React build not found at:', buildPath);
+    console.warn('   Run: npm run build');
+  }
 }
 
 // Error handling
@@ -99,8 +107,8 @@ app.use((err, req, res, next) => {
   });
 });
 
-// 404 handler (only in development, production uses React router)
-if (!isProduction) {
+// 404 handler (only if React app is not being served)
+if (!isProduction && !buildExists) {
   app.use((req, res) => {
     res.status(404).json({ error: 'Route not found' });
   });
