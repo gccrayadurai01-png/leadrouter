@@ -14,10 +14,21 @@ services:
         generateValue: true
       - key: CLIENT_URL
         sync: false
+      # Frontend API URL - empty string means use relative paths (same origin)
+      - key: REACT_APP_API_URL
+        value: ""
+      # Database configuration - using your own PostgreSQL
+      # IMPORTANT: Replace localhost with your PostgreSQL server's public IP or hostname
+      - key: DB_HOST
+        sync: false  # You'll set this manually in Render dashboard
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: "leadrouter"
+      - key: DB_USER
+        sync: false  # You'll set this manually in Render dashboard
+      - key: DB_PASSWORD
+        sync: false  # You'll set this manually in Render dashboard (mark as secret!)
     healthCheckPath: /health
 
-databases:
-  - name: leadrouter-db
-    plan: starter
-    databaseName: leadrouter
-    user: leadrouter_user
+# No Render database - using your own PostgreSQL server
