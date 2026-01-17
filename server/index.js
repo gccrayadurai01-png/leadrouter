@@ -107,9 +107,19 @@ if (!isProduction) {
 }
 
 // Start server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 LeadRouter server running on port ${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+  
+  // Test database connection on startup
+  try {
+    const pool = require('./db');
+    await pool.query('SELECT 1');
+    console.log('✅ Database connection successful');
+  } catch (error) {
+    console.error('❌ Database connection failed on startup:', error.message);
+    console.error('   The server will continue, but database operations may fail.');
+  }
 });
 
 module.exports = app;
