@@ -36,7 +36,10 @@ async function setupDatabase() {
       console.log('📦 Using DATABASE_URL (managed database)');
       dbClient = new Client({
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.DATABASE_URL.includes('render.com') || process.env.DATABASE_URL.includes('amazonaws.com')
+        // Enable SSL for Render databases (dpg- hostname), AWS, or render.com URLs
+        ssl: process.env.DATABASE_URL.includes('render.com') || 
+             process.env.DATABASE_URL.includes('dpg-') || 
+             process.env.DATABASE_URL.includes('amazonaws.com')
           ? { rejectUnauthorized: false }
           : false
       });

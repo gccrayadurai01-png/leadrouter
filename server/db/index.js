@@ -10,7 +10,10 @@ require('dotenv').config();
 const poolConfig = process.env.DATABASE_URL
   ? {
       connectionString: process.env.DATABASE_URL,
-      ssl: process.env.DATABASE_URL.includes('render.com') || process.env.DATABASE_URL.includes('amazonaws.com')
+      // Enable SSL for Render databases (dpg- hostname), AWS, or render.com URLs
+      ssl: process.env.DATABASE_URL.includes('render.com') || 
+           process.env.DATABASE_URL.includes('dpg-') || 
+           process.env.DATABASE_URL.includes('amazonaws.com')
         ? { rejectUnauthorized: false }
         : false,
       max: 20,
