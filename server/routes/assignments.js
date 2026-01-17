@@ -5,7 +5,7 @@
 
 const express = require('express');
 const weightedRoundRobin = require('../core/weighted-round-robin');
-const { authenticate, requireBDR } = require('../middleware/auth');
+const { authenticate, requireBDR, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
