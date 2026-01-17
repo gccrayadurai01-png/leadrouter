@@ -17,7 +17,29 @@ const isProduction = process.env.NODE_ENV === 'production';
 
 // Middleware
 app.use(helmet({
-  contentSecurityPolicy: isProduction ? undefined : false
+  contentSecurityPolicy: isProduction 
+    ? {
+        // Production CSP - strict but allows same-origin API calls
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: ["'self'"], // Same origin only (React app and API on same domain)
+          scriptSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'"], // Needed for React inline styles
+          imgSrc: ["'self'", "data:", "https:"],
+          fontSrc: ["'self'", "data:"],
+        },
+      }
+    : {
+        // Development CSP - allows localhost connections
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: ["'self'", "http://localhost:3001", "http://localhost:3000"],
+          scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"], // Needed for React dev
+          styleSrc: ["'self'", "'unsafe-inline'"], // Needed for inline styles
+          imgSrc: ["'self'", "data:", "https:"],
+          fontSrc: ["'self'", "data:"],
+        },
+      }
 }));
 
 // CORS configuration
