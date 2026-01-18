@@ -114,6 +114,26 @@ app.get('/health', async (req, res) => {
   }
 });
 
+// TEMPORARY: Database setup endpoint - REMOVE AFTER SETUP!
+// ⚠️ SECURITY WARNING: Remove this endpoint after database is set up!
+app.post('/api/setup-database', async (req, res) => {
+  try {
+    const { setupDatabase } = require('./db/setup');
+    await setupDatabase();
+    res.json({ 
+      success: true, 
+      message: 'Database setup completed successfully!',
+      warning: 'Please remove this endpoint for security.'
+    });
+  } catch (error) {
+    console.error('Setup error:', error);
+    res.status(500).json({ 
+      error: 'Setup failed', 
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Check server logs'
+    });
+  }
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/reps', require('./routes/reps'));
