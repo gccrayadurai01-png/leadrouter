@@ -38,5 +38,27 @@ pool.on('error', (err) => {
   process.exit(-1);
 });
 
+// Log connection config (without password) for debugging
+if (process.env.NODE_ENV === 'development' || process.env.DEBUG_DB) {
+  if (process.env.DATABASE_URL) {
+    const url = new URL(process.env.DATABASE_URL);
+    console.log('📊 Database Config:', {
+      host: url.hostname,
+      port: url.port,
+      database: url.pathname.slice(1),
+      user: url.username,
+      ssl: poolConfig.ssl ? 'enabled' : 'disabled'
+    });
+  } else {
+    console.log('📊 Database Config:', {
+      host: poolConfig.host,
+      port: poolConfig.port,
+      database: poolConfig.database,
+      user: poolConfig.user,
+      ssl: poolConfig.ssl ? 'enabled' : 'disabled'
+    });
+  }
+}
+
 module.exports = pool;
 

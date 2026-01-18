@@ -214,7 +214,18 @@ app.listen(PORT, async () => {
     console.log('✅ Database connection successful');
   } catch (error) {
     console.error('❌ Database connection failed on startup:', error.message);
+    console.error('   Error code:', error.code);
+    console.error('   Error details:', {
+      message: error.message,
+      code: error.code,
+      host: process.env.DATABASE_URL ? 'from DATABASE_URL' : process.env.DB_HOST,
+      hasDatabaseUrl: !!process.env.DATABASE_URL
+    });
     console.error('   The server will continue, but database operations may fail.');
+    console.error('   Check:');
+    console.error('   1. DATABASE_URL is set in Render environment variables');
+    console.error('   2. Database is linked to your service (Settings → Databases)');
+    console.error('   3. Database is running and accessible');
   }
 });
 
