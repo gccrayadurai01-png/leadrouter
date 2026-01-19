@@ -45,7 +45,11 @@ CREATE TABLE IF NOT EXISTS assignments (
     assigned_by UUID,
     score_at_assignment DECIMAL(10,4),
     weight_at_assignment DECIMAL(5,2),
-    metadata JSONB
+    metadata JSONB,
+    company_name VARCHAR(255),
+    company_domain VARCHAR(255),
+    is_manual BOOLEAN NOT NULL DEFAULT false,
+    is_company_match BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Audit logs: All system changes
@@ -80,7 +84,7 @@ CREATE TABLE IF NOT EXISTS hubspot_sync (
     access_token TEXT,
     refresh_token TEXT,
     expires_at TIMESTAMP WITH TIME ZONE,
-    hubspot_account_id VARCHAR(255),
+    hubspot_account_id VARCHAR(255) UNIQUE,
     last_sync_at TIMESTAMP WITH TIME ZONE,
     sync_status VARCHAR(50),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -94,6 +98,8 @@ CREATE INDEX IF NOT EXISTS idx_rep_scores_queue_score ON rep_scores(queue, curre
 CREATE INDEX IF NOT EXISTS idx_assignments_rep_id ON assignments(rep_id);
 CREATE INDEX IF NOT EXISTS idx_assignments_queue ON assignments(queue);
 CREATE INDEX IF NOT EXISTS idx_assignments_assigned_at ON assignments(assigned_at DESC);
+CREATE INDEX IF NOT EXISTS idx_assignments_company_domain ON assignments(company_domain);
+CREATE INDEX IF NOT EXISTS idx_assignments_company_name ON assignments(company_name);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity ON audit_logs(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);

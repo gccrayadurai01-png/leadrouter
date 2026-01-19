@@ -134,6 +134,54 @@ app.post('/api/setup-database', async (req, res) => {
   }
 });
 
+// TEMPORARY: Migration endpoint to add missing columns - REMOVE AFTER MIGRATION!
+// ⚠️ SECURITY WARNING: Remove this endpoint after migration is complete!
+app.post('/api/migrate-add-columns', async (req, res) => {
+  const pool = require('./db');
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Add missing columns to assignments table
+    await client.query(`
+      ALTER TABLE assignments 
+      ADD COLUMN IF NOT EXISTS company_name VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS company_domain VARCHAR(255),
+      ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT false,
+      ADD COLUMN IF NOT EXISTS is_company_match BOOLEAN NOT NULL DEFAULT false
+    `);
+    
+    // Add indexes for company matching
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_assignments_company_domain ON assignments(company_domain)
+    `);
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_assignments_company_name ON assignments(company_name)
+    `);
+    
+    await client.query('COMMIT');
+    
+    console.log('✅ Migration: Added missing columns to assignments table');
+    
+    res.json({ 
+      success: true, 
+      message: 'Migration completed successfully! Missing columns added to assignments table.',
+      warning: 'Please remove this endpoint for security.'
+    });
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Migration error:', error);
+    res.status(500).json({ 
+      error: 'Migration failed', 
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Check server logs',
+      details: error.message
+    });
+  } finally {
+    client.release();
+  }
+});
+
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/reps', require('./routes/reps'));

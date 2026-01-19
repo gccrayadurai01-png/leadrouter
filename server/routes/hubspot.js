@@ -40,11 +40,11 @@ router.get('/callback', async (req, res) => {
       return res.status(400).json({ error: tokens.error_description || 'OAuth error' });
     }
 
-    // Store tokens in database
+    // Store tokens in database (upsert by hubspot_account_id or just insert new)
     await pool.query(`
       INSERT INTO hubspot_sync (access_token, refresh_token, expires_at, hubspot_account_id)
       VALUES ($1, $2, $3, $4)
-      ON CONFLICT (id) DO UPDATE SET
+      ON CONFLICT (hubspot_account_id) DO UPDATE SET
         access_token = $1,
         refresh_token = $2,
         expires_at = $3,
