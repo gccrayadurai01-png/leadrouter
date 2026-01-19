@@ -260,6 +260,43 @@ app.listen(PORT, async () => {
     const pool = require('./db');
     await pool.query('SELECT 1');
     console.log('✅ Database connection successful');
+    
+    // Auto-migrate: Check and add missing columns if needed
+    try {
+      const checkColumns = await pool.query(`
+        SELECT column_name 
+        FROM information_schema.columns 
+        WHERE table_name = 'assignments' 
+        AND column_name IN ('company_name', 'company_domain', 'is_manual', 'is_company_match')
+      `);
+      
+      const existingColumns = checkColumns.rows.map(r => r.column_name);
+      const requiredColumns = ['company_name', 'company_domain', 'is_manual', 'is_company_match'];
+      const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
+      
+      if (missingColumns.length > 0) {
+        console.log('⚠️  Missing columns detected, running auto-migration...');
+        await pool.query(`
+          ALTER TABLE assignments 
+          ADD COLUMN IF NOT EXISTS company_name VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS company_domain VARCHAR(255),
+          ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT false,
+          ADD COLUMN IF NOT EXISTS is_company_match BOOLEAN NOT NULL DEFAULT false
+        `);
+        
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_assignments_company_domain ON assignments(company_domain)
+        `);
+        await pool.query(`
+          CREATE INDEX IF NOT EXISTS idx_assignments_company_name ON assignments(company_name)
+        `);
+        
+        console.log('✅ Auto-migration completed: Missing columns added');
+      }
+    } catch (migrationError) {
+      console.warn('⚠️  Auto-migration warning:', migrationError.message);
+      // Don't fail startup if migration has issues
+    }
   } catch (error) {
     console.error('❌ Database connection failed on startup:', error.message);
     console.error('   Error code:', error.code);
