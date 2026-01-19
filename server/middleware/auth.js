@@ -14,8 +14,9 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
  */
 async function authenticate(req, res, next) {
   try {
-    // Bypass auth in development mode
-    if (process.env.NODE_ENV === 'development' || process.env.BYPASS_AUTH === 'true') {
+    // Bypass auth ONLY in development mode AND when explicitly enabled
+    // SECURITY: Never bypass auth in production!
+    if (process.env.NODE_ENV === 'development' && process.env.BYPASS_AUTH === 'true') {
       // Get admin user from database for mock authentication
       try {
         const adminUser = await pool.query(
