@@ -17,20 +17,22 @@ services:
       # Frontend API URL - empty string means use relative paths (same origin)
       - key: REACT_APP_API_URL
         value: ""
-      # Database configuration - using Render PostgreSQL
-      # Option 1: Link database in Render dashboard (recommended)
-      # Go to: Service → Settings → Databases → Link Database
-      # This automatically adds DATABASE_URL environment variable
-      # Option 2: Use fromDatabase syntax below (if database name is 'leadrouter-db')
-      - key: DATABASE_URL
-        fromDatabase:
-          name: leadrouter-db
-          property: connectionString
+      # Database configuration - using MongoDB Atlas (recommended)
+      # Option 1: Use MongoDB Atlas (recommended)
+      # Set MONGODB_URI in Render dashboard:
+      # Go to: Service → Environment → Add Environment Variable
+      # Key: MONGODB_URI
+      # Value: mongodb+srv://username:password@cluster.mongodb.net/leadrouter?appName=leadrouter
+      - key: MONGODB_URI
+        sync: false
+      # Option 2: Use Render MongoDB (if available)
+      # Link database in Render dashboard (if MongoDB service exists)
+      # This automatically adds MONGODB_URI environment variable
     healthCheckPath: /health
 
-# Render PostgreSQL Database
-# Create a PostgreSQL database in Render Dashboard:
-# 1. Go to Dashboard → New → PostgreSQL
-# 2. Name it: leadrouter-db
-# 3. Link it to your web service (auto-adds DATABASE_URL)
-# OR manually add DATABASE_URL from database's Internal Database URL
+# MongoDB Configuration
+# For production, use MongoDB Atlas (recommended):
+# 1. Create free cluster at: https://www.mongodb.com/cloud/atlas
+# 2. Get connection string: mongodb+srv://username:password@cluster.mongodb.net/leadrouter
+# 3. Add MONGODB_URI to Render environment variables
+# 4. Whitelist Render IP addresses in MongoDB Atlas Network Access

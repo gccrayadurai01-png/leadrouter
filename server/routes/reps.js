@@ -4,8 +4,12 @@
  */
 
 const express = require('express');
-const pool = require('../db');
+const Rep = require('../db/models/Rep');
+const RepScore = require('../db/models/RepScore');
+const Assignment = require('../db/models/Assignment');
+const AuditLog = require('../db/models/AuditLog');
 const { authenticate, requireAdmin } = require('../middleware/auth');
+const mongoose = require('../db');
 
 const router = express.Router();
 
@@ -20,47 +24,44 @@ router.get('/', async (req, res) => {
   try {
     const { queue } = req.query;
     
-    let query = `
-      SELECT 
-        r.id,
-        r.name,
-        r.email,
-        r.hubspot_owner_id,
-        r.queue,
-        r.weight,
-        r.active,
-        r.created_at,
-        r.updated_at,
-        COALESCE(rs.current_score, 0.0) as current_score,
-        COUNT(a.id) as assignment_count
-      FROM reps r
-      LEFT JOIN rep_scores rs ON r.id = rs.rep_id AND rs.queue = r.queue
-      LEFT JOIN assignments a ON r.id = a.rep_id
-    `;
+    const query = queue ? { queue } : {};
+    const reps = await Rep.find(query).sort({ queue: 1, name: 1 }).lean();
     
-    const params = [];
-    if (queue) {
-      query += ' WHERE r.queue = $1';
-      params.push(queue);
-    }
+    // Get scores and assignment counts
+    const repIds = reps.map(r => r._id);
+    const scores = await RepScore.find({
+      rep_id: { $in: repIds }
+    }).lean();
     
-    query += ' GROUP BY r.id, rs.current_score ORDER BY r.queue, r.name';
+    const scoreMap = {};
+    scores.forEach(s => {
+      const key = `${s.rep_id.toString()}_${s.queue}`;
+      scoreMap[key] = s.current_score || 0;
+    });
     
-    const result = await pool.query(query, params);
+    const assignmentCounts = await Assignment.aggregate([
+      { $match: { rep_id: { $in: repIds } } },
+      { $group: { _id: '$rep_id', count: { $sum: 1 } } }
+    ]);
+    
+    const assignmentCountMap = {};
+    assignmentCounts.forEach(a => {
+      assignmentCountMap[a._id.toString()] = a.count;
+    });
     
     res.json({
-      reps: result.rows.map(row => ({
-        id: row.id,
-        name: row.name,
-        email: row.email,
-        hubspot_owner_id: row.hubspot_owner_id,
-        queue: row.queue,
-        weight: parseFloat(row.weight),
-        active: row.active,
-        currentScore: parseFloat(row.current_score),
-        assignmentCount: parseInt(row.assignment_count),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at
+      reps: reps.map(rep => ({
+        id: rep._id,
+        name: rep.name,
+        email: rep.email,
+        hubspot_owner_id: rep.hubspot_owner_id,
+        queue: rep.queue,
+        weight: parseFloat(rep.weight),
+        active: rep.active,
+        currentScore: scoreMap[`${rep._id.toString()}_${rep.queue}`] || 0,
+        assignmentCount: assignmentCountMap[rep._id.toString()] || 0,
+        createdAt: rep.createdAt,
+        updatedAt: rep.updatedAt
       }))
     });
   } catch (error) {
@@ -75,31 +76,28 @@ router.get('/', async (req, res) => {
  */
 router.get('/:id', async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        r.*,
-        COALESCE(rs.current_score, 0.0) as current_score
-      FROM reps r
-      LEFT JOIN rep_scores rs ON r.id = rs.rep_id AND rs.queue = r.queue
-      WHERE r.id = $1
-    `, [req.params.id]);
+    const rep = await Rep.findById(req.params.id).lean();
     
-    if (result.rows.length === 0) {
+    if (!rep) {
       return res.status(404).json({ error: 'Rep not found' });
     }
     
-    const row = result.rows[0];
+    const score = await RepScore.findOne({
+      rep_id: rep._id,
+      queue: rep.queue
+    }).lean();
+    
     res.json({
-      id: row.id,
-      name: row.name,
-      email: row.email,
-      hubspot_owner_id: row.hubspot_owner_id,
-      queue: row.queue,
-      weight: parseFloat(row.weight),
-      active: row.active,
-      currentScore: parseFloat(row.current_score),
-      createdAt: row.created_at,
-      updatedAt: row.updated_at
+      id: rep._id,
+      name: rep.name,
+      email: rep.email,
+      hubspot_owner_id: rep.hubspot_owner_id,
+      queue: rep.queue,
+      weight: parseFloat(rep.weight),
+      active: rep.active,
+      currentScore: score ? parseFloat(score.current_score) : 0,
+      createdAt: rep.createdAt,
+      updatedAt: rep.updatedAt
     });
   } catch (error) {
     console.error('Get rep error:', error);
@@ -127,27 +125,50 @@ router.post('/', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Weight must be greater than 0' });
     }
     
-    const result = await pool.query(`
-      INSERT INTO reps (name, email, hubspot_owner_id, queue, weight, active, created_by)
-      VALUES ($1, $2, $3, $4, $5, $6, $7)
-      RETURNING id, name, email, hubspot_owner_id, queue, weight, active, created_at
-    `, [name, email, hubspot_owner_id || null, queue, weight, active !== false, req.user.id]);
+    const rep = new Rep({
+      name,
+      email,
+      hubspot_owner_id: hubspot_owner_id || null,
+      queue,
+      weight,
+      active: active !== false,
+      created_by: req.user.id
+    });
+    
+    await rep.save();
+    
+    // Initialize score
+    const repScore = new RepScore({
+      rep_id: rep._id,
+      queue: rep.queue,
+      current_score: 0.0
+    });
+    await repScore.save();
     
     // Audit log
-    await pool.query(`
-      INSERT INTO audit_logs (action, entity_type, entity_id, user_id, changes)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [
-      'CREATE_REP',
-      'rep',
-      result.rows[0].id,
-      req.user.id,
-      JSON.stringify({ name, email, queue, weight, active })
-    ]);
+    const auditLog = new AuditLog({
+      action: 'CREATE_REP',
+      entity_type: 'rep',
+      entity_id: rep._id,
+      user_id: req.user.id,
+      changes: { name, email, queue, weight, active }
+    });
+    await auditLog.save();
     
-    res.status(201).json({ rep: result.rows[0] });
+    res.status(201).json({
+      rep: {
+        id: rep._id,
+        name: rep.name,
+        email: rep.email,
+        hubspot_owner_id: rep.hubspot_owner_id,
+        queue: rep.queue,
+        weight: rep.weight,
+        active: rep.active,
+        createdAt: rep.createdAt
+      }
+    });
   } catch (error) {
-    if (error.code === '23505') { // Unique violation
+    if (error.code === 11000) { // MongoDB duplicate key
       return res.status(409).json({ error: 'Email or HubSpot owner ID already exists' });
     }
     console.error('Create rep error:', error);
@@ -163,81 +184,68 @@ router.put('/:id', requireAdmin, async (req, res) => {
   try {
     const { name, email, hubspot_owner_id, queue, weight, active } = req.body;
     
-    // Get current rep data
-    const currentResult = await pool.query('SELECT * FROM reps WHERE id = $1', [req.params.id]);
-    if (currentResult.rows.length === 0) {
+    const rep = await Rep.findById(req.params.id);
+    if (!rep) {
       return res.status(404).json({ error: 'Rep not found' });
     }
     
-    const current = currentResult.rows[0];
+    const current = { ...rep.toObject() };
     
-    // Build update query dynamically
-    const updates = [];
-    const values = [];
-    let paramCount = 1;
-    
-    if (name !== undefined) {
-      updates.push(`name = $${paramCount++}`);
-      values.push(name);
-    }
-    if (email !== undefined) {
-      updates.push(`email = $${paramCount++}`);
-      values.push(email);
-    }
-    if (hubspot_owner_id !== undefined) {
-      updates.push(`hubspot_owner_id = $${paramCount++}`);
-      values.push(hubspot_owner_id);
-    }
+    // Update fields
+    if (name !== undefined) rep.name = name;
+    if (email !== undefined) rep.email = email;
+    if (hubspot_owner_id !== undefined) rep.hubspot_owner_id = hubspot_owner_id;
     if (queue !== undefined) {
       if (!['SMB', 'ENT'].includes(queue)) {
         return res.status(400).json({ error: 'Queue must be SMB or ENT' });
       }
-      updates.push(`queue = $${paramCount++}`);
-      values.push(queue);
+      rep.queue = queue;
     }
     if (weight !== undefined) {
       if (weight <= 0) {
         return res.status(400).json({ error: 'Weight must be greater than 0' });
       }
-      updates.push(`weight = $${paramCount++}`);
-      values.push(weight);
+      rep.weight = weight;
     }
-    if (active !== undefined) {
-      updates.push(`active = $${paramCount++}`);
-      values.push(active);
+    if (active !== undefined) rep.active = active;
+    
+    rep.updated_by = req.user.id;
+    
+    await rep.save();
+    
+    // If queue changed, update score
+    if (queue && queue !== current.queue) {
+      // Reset old queue score
+      await RepScore.updateOne(
+        { rep_id: rep._id, queue: current.queue },
+        { current_score: 0.0 }
+      );
+      
+      // Initialize new queue score
+      await RepScore.findOneAndUpdate(
+        { rep_id: rep._id, queue: queue },
+        {
+          rep_id: rep._id,
+          queue: queue,
+          current_score: 0.0
+        },
+        { upsert: true }
+      );
     }
-    
-    if (updates.length === 0) {
-      return res.status(400).json({ error: 'No fields to update' });
-    }
-    
-    updates.push(`updated_by = $${paramCount++}`);
-    values.push(req.user.id);
-    
-    values.push(req.params.id);
-    
-    const result = await pool.query(`
-      UPDATE reps
-      SET ${updates.join(', ')}
-      WHERE id = $${paramCount}
-      RETURNING *
-    `, values);
     
     // Audit log
-    await pool.query(`
-      INSERT INTO audit_logs (action, entity_type, entity_id, user_id, changes)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [
-      'UPDATE_REP',
-      'rep',
-      req.params.id,
-      req.user.id,
-      JSON.stringify({ before: current, after: result.rows[0] })
-    ]);
+    const auditLog = new AuditLog({
+      action: 'UPDATE_REP',
+      entity_type: 'rep',
+      entity_id: rep._id,
+      user_id: req.user.id,
+      changes: { before: current, after: rep.toObject() }
+    });
+    await auditLog.save();
     
-    res.json({ rep: result.rows[0] });
+    res.json({ rep: rep.toObject() });
   } catch (error) {
-    if (error.code === '23505') {
+    if (error.code === 11000) {
       return res.status(409).json({ error: 'Email or HubSpot owner ID already exists' });
     }
     console.error('Update rep error:', error);
@@ -251,23 +259,24 @@ router.put('/:id', requireAdmin, async (req, res) => {
  */
 router.delete('/:id', requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query('DELETE FROM reps WHERE id = $1 RETURNING *', [req.params.id]);
+    const rep = await Rep.findByIdAndDelete(req.params.id);
     
-    if (result.rows.length === 0) {
+    if (!rep) {
       return res.status(404).json({ error: 'Rep not found' });
     }
     
+    // Delete associated scores (MongoDB will handle this with schema if we add it)
+    await RepScore.deleteMany({ rep_id: rep._id });
+    
     // Audit log
-    await pool.query(`
-      INSERT INTO audit_logs (action, entity_type, entity_id, user_id, changes)
-      VALUES ($1, $2, $3, $4, $5)
-    `, [
-      'DELETE_REP',
-      'rep',
-      req.params.id,
-      req.user.id,
-      JSON.stringify({ rep: result.rows[0] })
-    ]);
+    const auditLog = new AuditLog({
+      action: 'DELETE_REP',
+      entity_type: 'rep',
+      entity_id: rep._id,
+      user_id: req.user.id,
+      changes: { rep: rep.toObject() }
+    });
+    await auditLog.save();
     
     res.json({ message: 'Rep deleted successfully' });
   } catch (error) {
@@ -298,66 +307,66 @@ router.put('/:id/assignment-count', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'count must be a non-negative number' });
     }
     
-    const pool = require('../db');
-    const client = await pool.connect();
+    const session = await mongoose.startSession();
     
     try {
-      await client.query('BEGIN');
-      
-      // Verify rep exists
-      const repCheck = await client.query(
-        'SELECT id, name FROM reps WHERE id = $1 AND queue = $2',
-        [id, queue]
-      );
-      
-      if (repCheck.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Rep not found in this queue' });
-      }
-      
-      // Get current assignment count
-      const currentCount = await client.query(
-        'SELECT COUNT(*) as count FROM assignments WHERE rep_id = $1 AND queue = $2',
-        [id, queue]
-      );
-      
-      const current = parseInt(currentCount.rows[0].count);
-      const difference = countNum - current;
-      
-      if (difference > 0) {
-        // Add manual assignments
-        for (let i = 0; i < difference; i++) {
-          await client.query(`
-            INSERT INTO assignments (rep_id, queue, assigned_by, is_manual, is_company_match)
-            VALUES ($1, $2, $3, $4, $5)
-          `, [id, queue, req.user.id, true, false]);
+      await session.withTransaction(async () => {
+        // Verify rep exists
+        const rep = await Rep.findOne({ _id: id, queue }).session(session);
+        
+        if (!rep) {
+          throw new Error('Rep not found in this queue');
         }
-      } else if (difference < 0) {
-        // Remove oldest manual assignments
-        await client.query(`
-          DELETE FROM assignments
-          WHERE id IN (
-            SELECT id FROM assignments
-            WHERE rep_id = $1 AND queue = $2 AND is_manual = true
-            ORDER BY assigned_at ASC
-            LIMIT $3
-          )
-        `, [id, queue, Math.abs(difference)]);
-      }
+        
+        // Get current assignment count
+        const current = await Assignment.countDocuments({
+          rep_id: id,
+          queue
+        }).session(session);
+        
+        const difference = countNum - current;
+        
+        if (difference > 0) {
+          // Add manual assignments
+          const assignments = [];
+          for (let i = 0; i < difference; i++) {
+            assignments.push({
+              rep_id: id,
+              queue,
+              assigned_by: req.user.id,
+              is_manual: true,
+              is_company_match: false
+            });
+          }
+          await Assignment.insertMany(assignments, { session });
+        } else if (difference < 0) {
+          // Remove oldest manual assignments
+          const toDelete = await Assignment.find({
+            rep_id: id,
+            queue,
+            is_manual: true
+          })
+          .sort({ assigned_at: 1 })
+          .limit(Math.abs(difference))
+          .session(session);
+          
+          const idsToDelete = toDelete.map(a => a._id);
+          await Assignment.deleteMany({ _id: { $in: idsToDelete } }).session(session);
+        }
+      });
       
-      await client.query('COMMIT');
+      const currentCount = await Assignment.countDocuments({ rep_id: id, queue });
       
       res.json({
         success: true,
         message: `Assignment count updated to ${countNum}`,
-        previousCount: current,
+        previousCount: currentCount,
         newCount: countNum
       });
     } catch (error) {
-      await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      await session.endSession();
     }
   } catch (error) {
     console.error('Update assignment count error:', error);
@@ -366,4 +375,3 @@ router.put('/:id/assignment-count', requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
-

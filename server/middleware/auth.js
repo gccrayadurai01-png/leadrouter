@@ -4,7 +4,7 @@
  */
 
 const jwt = require('jsonwebtoken');
-const pool = require('../db');
+const User = require('../db/models/User');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'change-this-secret-in-production';
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '24h';
@@ -19,18 +19,20 @@ async function authenticate(req, res, next) {
     if (process.env.NODE_ENV === 'development' && process.env.BYPASS_AUTH === 'true') {
       // Get admin user from database for mock authentication
       try {
-        const adminUser = await pool.query(
-          'SELECT id, email, role, active FROM users WHERE role = $1 LIMIT 1',
-          ['admin']
-        );
+        const adminUser = await User.findOne({ role: 'admin' });
         
-        if (adminUser.rows.length > 0) {
-          req.user = adminUser.rows[0];
+        if (adminUser) {
+          req.user = {
+            id: adminUser._id.toString(),
+            email: adminUser.email,
+            role: adminUser.role,
+            active: adminUser.active
+          };
           return next();
         } else {
           // If no admin user exists, create a mock one
           req.user = {
-            id: '00000000-0000-0000-0000-000000000000',
+            id: '000000000000000000000000',
             email: 'admin@leadrouter.com',
             role: 'admin',
             active: true
@@ -40,7 +42,7 @@ async function authenticate(req, res, next) {
       } catch (dbError) {
         // If database query fails, use mock user
         req.user = {
-          id: '00000000-0000-0000-0000-000000000000',
+          id: '000000000000000000000000',
           email: 'admin@leadrouter.com',
           role: 'admin',
           active: true
@@ -59,16 +61,18 @@ async function authenticate(req, res, next) {
     const decoded = jwt.verify(token, JWT_SECRET);
     
     // Verify user still exists and is active
-    const userResult = await pool.query(
-      'SELECT id, email, role, active FROM users WHERE id = $1',
-      [decoded.userId]
-    );
+    const user = await User.findById(decoded.userId);
     
-    if (userResult.rows.length === 0 || !userResult.rows[0].active) {
+    if (!user || !user.active) {
       return res.status(401).json({ error: 'Invalid or inactive user' });
     }
     
-    req.user = userResult.rows[0];
+    req.user = {
+      id: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      active: user.active
+    };
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -118,4 +122,3 @@ module.exports = {
   generateToken,
   JWT_SECRET
 };
-

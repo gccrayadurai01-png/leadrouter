@@ -1,49 +1,76 @@
-# Database Setup Script for LeadRouter
+# Database Setup Script for LeadRouter (MongoDB)
 Write-Host "🗄️  Setting up LeadRouter database..." -ForegroundColor Green
 Write-Host ""
 
-# Check if PostgreSQL is accessible
-Write-Host "Checking PostgreSQL connection..." -ForegroundColor Yellow
-try {
-    $env:PGPASSWORD = "postgres"
-    $result = & psql -h localhost -U postgres -d postgres -c "SELECT version();" 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        Write-Host "✅ PostgreSQL is running!" -ForegroundColor Green
-        Write-Host ""
-        
-        # Create database if it doesn't exist
-        Write-Host "Creating database..." -ForegroundColor Yellow
-        & psql -h localhost -U postgres -d postgres -c "SELECT 1 FROM pg_database WHERE datname = 'leadrouter'" | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            & psql -h localhost -U postgres -d postgres -c "CREATE DATABASE leadrouter;"
-            Write-Host "✅ Database created!" -ForegroundColor Green
-        } else {
-            Write-Host "ℹ️  Database already exists" -ForegroundColor Yellow
-        }
-        
-        Write-Host ""
-        Write-Host "Running setup script..." -ForegroundColor Yellow
-        npm run setup
-        
-        Write-Host ""
-        Write-Host "✅ Database setup complete!" -ForegroundColor Green
-        Write-Host ""
-        Write-Host "You can now start the app with: npm run dev" -ForegroundColor Cyan
-    } else {
-        Write-Host "❌ Cannot connect to PostgreSQL" -ForegroundColor Red
-        Write-Host ""
-        Write-Host "Please:" -ForegroundColor Yellow
-        Write-Host "  1. Install PostgreSQL from: https://www.postgresql.org/download/windows/" -ForegroundColor White
-        Write-Host "  2. Make sure PostgreSQL service is running" -ForegroundColor White
-        Write-Host "  3. Update .env with your PostgreSQL password if different" -ForegroundColor White
-    }
-} catch {
-    Write-Host "❌ PostgreSQL not found or not accessible" -ForegroundColor Red
+# Check if MongoDB connection string is set
+if ($env:MONGODB_URI) {
+    Write-Host "✅ MONGODB_URI is set" -ForegroundColor Green
+    Write-Host "   Using MongoDB Atlas or external MongoDB" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "Please install PostgreSQL:" -ForegroundColor Yellow
-    Write-Host "  Download: https://www.postgresql.org/download/windows/" -ForegroundColor White
+    Write-Host "Running setup script..." -ForegroundColor Yellow
+    npm run setup
+    
     Write-Host ""
-    Write-Host "Or use Docker for PostgreSQL:" -ForegroundColor Yellow
-    Write-Host "  docker run -d --name leadrouter-db -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=leadrouter -p 5432:5432 postgres:15-alpine" -ForegroundColor White
+    Write-Host "✅ Database setup complete!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "You can now start the app with: npm run dev" -ForegroundColor Cyan
+    exit 0
 }
 
+# Check if MongoDB is accessible locally
+Write-Host "Checking MongoDB connection..." -ForegroundColor Yellow
+Write-Host ""
+
+# Try to connect using mongosh if available
+try {
+    $mongoshCheck = & mongosh --version 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host "✅ MongoDB client tools found" -ForegroundColor Green
+        Write-Host ""
+        
+        $host = $env:DB_HOST
+        if (-not $host) {
+            $host = "localhost"
+        }
+        
+        $port = $env:DB_PORT
+        if (-not $port) {
+            $port = "27017"
+        }
+        
+        Write-Host "Attempting to connect to MongoDB at ${host}:${port}..." -ForegroundColor Yellow
+        
+        # Test connection
+        $testConnection = & mongosh "mongodb://${host}:${port}" --eval "db.adminCommand('ping')" --quiet 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ MongoDB is running!" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "Running setup script..." -ForegroundColor Yellow
+            npm run setup
+            
+            Write-Host ""
+            Write-Host "✅ Database setup complete!" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "You can now start the app with: npm run dev" -ForegroundColor Cyan
+        } else {
+            Write-Host "⚠️  Could not connect to MongoDB" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "Please:" -ForegroundColor Yellow
+            Write-Host "  1. Set MONGODB_URI in .env for MongoDB Atlas" -ForegroundColor White
+            Write-Host "  2. Or start MongoDB locally: docker run -d -p 27017:27017 --name mongodb mongo:7.0" -ForegroundColor White
+            Write-Host "  3. Or install MongoDB: https://www.mongodb.com/try/download/community" -ForegroundColor White
+        }
+    } else {
+        throw "mongosh not found"
+    }
+} catch {
+    Write-Host "⚠️  MongoDB client tools not found" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "Please:" -ForegroundColor Yellow
+    Write-Host "  1. Set MONGODB_URI in .env for MongoDB Atlas (recommended)" -ForegroundColor White
+    Write-Host "  2. Or use Docker: docker run -d -p 27017:27017 --name mongodb mongo:7.0" -ForegroundColor White
+    Write-Host "  3. Or install MongoDB: https://www.mongodb.com/try/download/community" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Running setup script anyway (will use MONGODB_URI if set)..." -ForegroundColor Yellow
+    npm run setup
+}

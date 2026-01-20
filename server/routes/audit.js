@@ -4,7 +4,8 @@
  */
 
 const express = require('express');
-const pool = require('../db');
+const AuditLog = require('../db/models/AuditLog');
+const User = require('../db/models/User');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
@@ -21,60 +22,31 @@ router.get('/', async (req, res) => {
   try {
     const { entity_type, entity_id, action, limit = 100, offset = 0 } = req.query;
     
-    let query = `
-      SELECT 
-        a.id,
-        a.action,
-        a.entity_type,
-        a.entity_id,
-        a.user_id,
-        u.name as user_name,
-        u.email as user_email,
-        a.changes,
-        a.ip_address,
-        a.user_agent,
-        a.created_at
-      FROM audit_logs a
-      LEFT JOIN users u ON a.user_id = u.id
-      WHERE 1=1
-    `;
+    const query = {};
+    if (entity_type) query.entity_type = entity_type;
+    if (entity_id) query.entity_id = entity_id;
+    if (action) query.action = action;
     
-    const params = [];
-    let paramCount = 1;
-    
-    if (entity_type) {
-      query += ` AND a.entity_type = $${paramCount++}`;
-      params.push(entity_type);
-    }
-    
-    if (entity_id) {
-      query += ` AND a.entity_id = $${paramCount++}`;
-      params.push(entity_id);
-    }
-    
-    if (action) {
-      query += ` AND a.action = $${paramCount++}`;
-      params.push(action);
-    }
-    
-    query += ` ORDER BY a.created_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
-    params.push(parseInt(limit), parseInt(offset));
-    
-    const result = await pool.query(query, params);
+    const logs = await AuditLog.find(query)
+      .populate('user_id', 'name email')
+      .sort({ created_at: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(offset))
+      .lean();
     
     res.json({
-      logs: result.rows.map(row => ({
-        id: row.id,
-        action: row.action,
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        userId: row.user_id,
-        userName: row.user_name,
-        userEmail: row.user_email,
-        changes: row.changes,
-        ipAddress: row.ip_address,
-        userAgent: row.user_agent,
-        createdAt: row.created_at
+      logs: logs.map(log => ({
+        id: log._id,
+        action: log.action,
+        entityType: log.entity_type,
+        entityId: log.entity_id,
+        userId: log.user_id?._id || log.user_id,
+        userName: log.user_id?.name || null,
+        userEmail: log.user_id?.email || null,
+        changes: log.changes,
+        ipAddress: log.ip_address,
+        userAgent: log.user_agent,
+        createdAt: log.created_at
       })),
       limit: parseInt(limit),
       offset: parseInt(offset)
@@ -86,4 +58,3 @@ router.get('/', async (req, res) => {
 });
 
 module.exports = router;
-

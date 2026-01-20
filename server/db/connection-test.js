@@ -4,32 +4,35 @@
  */
 
 require('dotenv').config();
-const pool = require('./index');
+const mongoose = require('./index');
 
 async function testConnection() {
   console.log('Testing database connection...\n');
   
   try {
-    // Test basic connection
-    const result = await pool.query('SELECT NOW() as current_time, version() as version');
+    // Wait for MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      await new Promise((resolve, reject) => {
+        mongoose.connection.once('connected', resolve);
+        mongoose.connection.once('error', reject);
+        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      });
+    }
+    
     console.log('✅ Database connection successful!');
-    console.log(`   Current time: ${result.rows[0].current_time}`);
-    console.log(`   PostgreSQL version: ${result.rows[0].version.split(' ')[0]} ${result.rows[0].version.split(' ')[1]}\n`);
+    console.log(`   MongoDB version: ${mongoose.version || 'unknown'}`);
+    console.log(`   Database: ${mongoose.connection.name}`);
+    console.log(`   Host: ${mongoose.connection.host}:${mongoose.connection.port}\n`);
     
-    // Test if tables exist
-    const tablesResult = await pool.query(`
-      SELECT table_name 
-      FROM information_schema.tables 
-      WHERE table_schema = 'public'
-      ORDER BY table_name
-    `);
+    // Test if collections exist
+    const collections = await mongoose.connection.db.listCollections().toArray();
     
-    if (tablesResult.rows.length === 0) {
-      console.log('⚠️  No tables found. Run migrations first: npm run migrate');
+    if (collections.length === 0) {
+      console.log('⚠️  No collections found. Run setup first: npm run setup');
     } else {
-      console.log(`✅ Found ${tablesResult.rows.length} tables:`);
-      tablesResult.rows.forEach(row => {
-        console.log(`   - ${row.table_name}`);
+      console.log(`✅ Found ${collections.length} collections:`);
+      collections.forEach(col => {
+        console.log(`   - ${col.name}`);
       });
     }
     
@@ -39,13 +42,13 @@ async function testConnection() {
     console.error('❌ Database connection failed!');
     console.error(`   Error: ${error.message}\n`);
     console.error('Please check:');
-    console.error('   1. PostgreSQL is running');
+    console.error('   1. MongoDB is running');
     console.error('   2. Database credentials in .env are correct');
-    console.error('   3. Database exists');
+    console.error('   3. Connection string is valid');
     console.error('   4. Network connectivity\n');
     process.exit(1);
   } finally {
-    await pool.end();
+    await mongoose.connection.close();
   }
 }
 
@@ -54,5 +57,3 @@ if (require.main === module) {
 }
 
 module.exports = { testConnection };
-
-

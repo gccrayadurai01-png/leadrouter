@@ -4,7 +4,7 @@
 
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const pool = require('../db');
+const User = require('../db/models/User');
 const { generateToken } = require('../middleware/auth');
 
 const router = express.Router();
@@ -21,16 +21,11 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password required' });
     }
     
-    const result = await pool.query(
-      'SELECT id, email, password_hash, role, name, active FROM users WHERE email = $1',
-      [email.toLowerCase()]
-    );
+    const user = await User.findOne({ email: email.toLowerCase() });
     
-    if (result.rows.length === 0) {
+    if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
-    
-    const user = result.rows[0];
     
     if (!user.active) {
       return res.status(401).json({ error: 'Account is inactive' });
@@ -43,17 +38,15 @@ router.post('/login', async (req, res) => {
     }
     
     // Update last login
-    await pool.query(
-      'UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE id = $1',
-      [user.id]
-    );
+    user.last_login = new Date();
+    await user.save();
     
-    const token = generateToken(user.id, user.role);
+    const token = generateToken(user._id.toString(), user.role);
     
     res.json({
       token,
       user: {
-        id: user.id,
+        id: user._id,
         email: user.email,
         role: user.role,
         name: user.name
@@ -90,4 +83,3 @@ router.get('/me', authenticate, async (req, res) => {
 });
 
 module.exports = router;
-

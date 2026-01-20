@@ -3,12 +3,14 @@
  * Checks database connectivity before processing requests
  */
 
-const pool = require('../db');
+const mongoose = require('../db');
 
 async function checkDatabaseHealth(req, res, next) {
   try {
-    // Simple query to check connection
-    await pool.query('SELECT 1');
+    // Check MongoDB connection state
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('MongoDB not connected');
+    }
     next();
   } catch (error) {
     console.error('Database health check failed:', error);
@@ -20,5 +22,3 @@ async function checkDatabaseHealth(req, res, next) {
 }
 
 module.exports = checkDatabaseHealth;
-
-

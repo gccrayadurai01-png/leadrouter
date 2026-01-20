@@ -1,44 +1,46 @@
 /**
  * Database Migration Script
- * Run this to set up the database schema
+ * MongoDB doesn't require migrations like SQL databases.
+ * This script ensures indexes are created.
  */
 
 require('dotenv').config();
-const { Pool } = require('pg');
-const fs = require('fs');
-const path = require('path');
+const mongoose = require('./index');
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'leadrouter',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-});
+// Import all models to ensure they're registered
+require('./models/User');
+require('./models/Rep');
+require('./models/RepScore');
+require('./models/Assignment');
+require('./models/AuditLog');
+require('./models/HubSpotSync');
 
 async function migrate() {
-  const client = await pool.connect();
-  
   try {
-    console.log('Starting database migration...');
+    console.log('Starting database migration (indexes)...');
     
-    // Read schema file
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
+    // Wait for MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      await new Promise((resolve) => {
+        mongoose.connection.once('connected', resolve);
+      });
+    }
     
-    // Execute schema
-    await client.query('BEGIN');
-    await client.query(schema);
-    await client.query('COMMIT');
+    // Create all indexes
+    console.log('Creating indexes...');
+    await mongoose.connection.db.collection('users').createIndexes();
+    await mongoose.connection.db.collection('reps').createIndexes();
+    await mongoose.connection.db.collection('repscores').createIndexes();
+    await mongoose.connection.db.collection('assignments').createIndexes();
+    await mongoose.connection.db.collection('auditlogs').createIndexes();
+    await mongoose.connection.db.collection('hubspotsyncs').createIndexes();
     
-    console.log('✅ Database migration completed successfully!');
+    console.log('✅ Database migration (indexes) completed successfully!');
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('❌ Migration failed:', error);
     throw error;
   } finally {
-    client.release();
-    await pool.end();
+    await mongoose.connection.close();
   }
 }
 
@@ -52,4 +54,3 @@ if (require.main === module) {
 }
 
 module.exports = { migrate };
-

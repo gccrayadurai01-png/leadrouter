@@ -85,22 +85,25 @@ app.use('/api/', limiter);
 app.get('/health', async (req, res) => {
   try {
     // Check database connection
-    const pool = require('./db');
-    await pool.query('SELECT 1');
+    const mongoose = require('./db');
     
-    // Check if users table exists and has data
+    if (mongoose.connection.readyState !== 1) {
+      throw new Error('MongoDB not connected');
+    }
+    
+    // Check if users collection exists and has data
     let usersCount = 0;
     try {
-      const usersResult = await pool.query('SELECT COUNT(*) as count FROM users');
-      usersCount = parseInt(usersResult.rows[0].count);
+      const User = require('./db/models/User');
+      usersCount = await User.countDocuments();
     } catch (err) {
-      // Table might not exist
+      // Collection might not exist
     }
     
     res.json({ 
       status: 'ok', 
       database: 'connected',
-      usersTableExists: usersCount > 0,
+      usersCollectionExists: usersCount > 0,
       usersCount: usersCount,
       timestamp: new Date().toISOString() 
     });
@@ -134,51 +137,28 @@ app.post('/api/setup-database', async (req, res) => {
   }
 });
 
-// TEMPORARY: Migration endpoint to add missing columns - REMOVE AFTER MIGRATION!
-// ⚠️ SECURITY WARNING: Remove this endpoint after migration is complete!
+// MongoDB doesn't need column migrations - schemas are flexible
+// This endpoint is kept for compatibility but does nothing for MongoDB
 app.post('/api/migrate-add-columns', async (req, res) => {
-  const pool = require('./db');
-  const client = await pool.connect();
-  
   try {
-    await client.query('BEGIN');
+    const mongoose = require('./db');
     
-    // Add missing columns to assignments table
-    await client.query(`
-      ALTER TABLE assignments 
-      ADD COLUMN IF NOT EXISTS company_name VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS company_domain VARCHAR(255),
-      ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT false,
-      ADD COLUMN IF NOT EXISTS is_company_match BOOLEAN NOT NULL DEFAULT false
-    `);
+    // Ensure indexes exist (MongoDB handles schema flexibility automatically)
+    const Assignment = require('./db/models/Assignment');
+    await Assignment.createIndexes();
     
-    // Add indexes for company matching
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_assignments_company_domain ON assignments(company_domain)
-    `);
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_assignments_company_name ON assignments(company_name)
-    `);
-    
-    await client.query('COMMIT');
-    
-    console.log('✅ Migration: Added missing columns to assignments table');
+    console.log('✅ MongoDB indexes ensured');
     
     res.json({ 
       success: true, 
-      message: 'Migration completed successfully! Missing columns added to assignments table.',
-      warning: 'Please remove this endpoint for security.'
+      message: 'MongoDB indexes ensured. No migration needed (schemas are flexible).'
     });
   } catch (error) {
-    await client.query('ROLLBACK');
-    console.error('Migration error:', error);
+    console.error('Index creation error:', error);
     res.status(500).json({ 
-      error: 'Migration failed', 
-      message: process.env.NODE_ENV === 'development' ? error.message : 'Check server logs',
-      details: error.message
+      error: 'Index creation failed', 
+      message: process.env.NODE_ENV === 'development' ? error.message : 'Check server logs'
     });
-  } finally {
-    client.release();
   }
 });
 
@@ -257,58 +237,49 @@ app.listen(PORT, async () => {
   
   // Test database connection on startup
   try {
-    const pool = require('./db');
-    await pool.query('SELECT 1');
+    const mongoose = require('./db');
+    
+    // Wait for MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      await new Promise((resolve, reject) => {
+        mongoose.connection.once('connected', resolve);
+        mongoose.connection.once('error', reject);
+        setTimeout(() => reject(new Error('Connection timeout')), 10000);
+      });
+    }
+    
     console.log('✅ Database connection successful');
     
-    // Auto-migrate: Check and add missing columns if needed
+    // Ensure MongoDB indexes exist
     try {
-      const checkColumns = await pool.query(`
-        SELECT column_name 
-        FROM information_schema.columns 
-        WHERE table_name = 'assignments' 
-        AND column_name IN ('company_name', 'company_domain', 'is_manual', 'is_company_match')
-      `);
+      const Assignment = require('./db/models/Assignment');
+      const Rep = require('./db/models/Rep');
+      const RepScore = require('./db/models/RepScore');
+      const User = require('./db/models/User');
+      const AuditLog = require('./db/models/AuditLog');
       
-      const existingColumns = checkColumns.rows.map(r => r.column_name);
-      const requiredColumns = ['company_name', 'company_domain', 'is_manual', 'is_company_match'];
-      const missingColumns = requiredColumns.filter(col => !existingColumns.includes(col));
+      await Assignment.createIndexes();
+      await Rep.createIndexes();
+      await RepScore.createIndexes();
+      await User.createIndexes();
+      await AuditLog.createIndexes();
       
-      if (missingColumns.length > 0) {
-        console.log('⚠️  Missing columns detected, running auto-migration...');
-        await pool.query(`
-          ALTER TABLE assignments 
-          ADD COLUMN IF NOT EXISTS company_name VARCHAR(255),
-          ADD COLUMN IF NOT EXISTS company_domain VARCHAR(255),
-          ADD COLUMN IF NOT EXISTS is_manual BOOLEAN NOT NULL DEFAULT false,
-          ADD COLUMN IF NOT EXISTS is_company_match BOOLEAN NOT NULL DEFAULT false
-        `);
-        
-        await pool.query(`
-          CREATE INDEX IF NOT EXISTS idx_assignments_company_domain ON assignments(company_domain)
-        `);
-        await pool.query(`
-          CREATE INDEX IF NOT EXISTS idx_assignments_company_name ON assignments(company_name)
-        `);
-        
-        console.log('✅ Auto-migration completed: Missing columns added');
-      }
-    } catch (migrationError) {
-      console.warn('⚠️  Auto-migration warning:', migrationError.message);
-      // Don't fail startup if migration has issues
+      console.log('✅ MongoDB indexes ensured');
+    } catch (indexError) {
+      console.warn('⚠️  Index creation warning:', indexError.message);
+      // Don't fail startup if index creation has issues
     }
   } catch (error) {
     console.error('❌ Database connection failed on startup:', error.message);
-    console.error('   Error code:', error.code);
     console.error('   Error details:', {
       message: error.message,
       code: error.code,
-      host: process.env.DATABASE_URL ? 'from DATABASE_URL' : process.env.DB_HOST,
-      hasDatabaseUrl: !!process.env.DATABASE_URL
+      connectionString: process.env.MONGODB_URI ? 'MONGODB_URI set' : 'Using DB_* variables',
+      hasMongoDBUri: !!process.env.MONGODB_URI
     });
     console.error('   The server will continue, but database operations may fail.');
     console.error('   Check:');
-    console.error('   1. DATABASE_URL is set in Render environment variables');
+    console.error('   1. MONGODB_URI is set correctly in .env file');
     console.error('   2. Database is linked to your service (Settings → Databases)');
     console.error('   3. Database is running and accessible');
   }

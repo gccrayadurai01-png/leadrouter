@@ -6,6 +6,10 @@
 const express = require('express');
 const weightedRoundRobin = require('../core/weighted-round-robin');
 const { authenticate, requireBDR, requireAdmin } = require('../middleware/auth');
+const Assignment = require('../db/models/Assignment');
+const Rep = require('../db/models/Rep');
+const User = require('../db/models/User');
+const mongoose = require('../db');
 
 const router = express.Router();
 
@@ -77,65 +81,53 @@ router.post('/manual', requireAdmin, async (req, res) => {
       return res.status(400).json({ error: 'Queue must be SMB or ENT' });
     }
     
-    const pool = require('../db');
-    const client = await pool.connect();
+    const session = await mongoose.startSession();
+    let result;
     
     try {
-      await client.query('BEGIN');
-      
-      // Verify rep exists and is in correct queue
-      const repCheck = await client.query(
-        'SELECT id, name, hubspot_owner_id FROM reps WHERE id = $1 AND queue = $2',
-        [repId, queue]
-      );
-      
-      if (repCheck.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: 'Rep not found in this queue' });
-      }
-      
-      const rep = repCheck.rows[0];
-      
-      // Create manual assignment (doesn't affect round robin scores)
-      const assignmentResult = await client.query(`
-        INSERT INTO assignments (
-          rep_id, queue, hubspot_contact_id, hubspot_deal_id,
-          assigned_by, metadata, company_name, company_domain, is_manual, is_company_match
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-        RETURNING id, assigned_at
-      `, [
-        repId,
-        queue,
-        hubspotContactId || null,
-        hubspotDealId || null,
-        req.user.id,
-        metadata ? JSON.stringify(metadata) : null,
-        companyName || null,
-        companyDomain || null,
-        true, // is_manual
-        false // is_company_match
-      ]);
-      
-      await client.query('COMMIT');
-      
-      res.json({
-        success: true,
-        assignmentId: assignmentResult.rows[0].id,
-        rep: {
-          id: rep.id,
-          name: rep.name,
-          hubspot_owner_id: rep.hubspot_owner_id
-        },
-        queue,
-        assignedAt: assignmentResult.rows[0].assigned_at,
-        isManual: true
+      await session.withTransaction(async () => {
+        // Verify rep exists and is in correct queue
+        const rep = await Rep.findOne({ _id: repId, queue }).session(session);
+        
+        if (!rep) {
+          throw new Error('Rep not found in this queue');
+        }
+        
+        // Create manual assignment (doesn't affect round robin scores)
+        const assignment = new Assignment({
+          rep_id: rep._id,
+          queue,
+          hubspot_contact_id: hubspotContactId || null,
+          hubspot_deal_id: hubspotDealId || null,
+          assigned_by: req.user.id,
+          metadata: metadata || null,
+          company_name: companyName || null,
+          company_domain: companyDomain || null,
+          is_manual: true,
+          is_company_match: false
+        });
+        
+        await assignment.save({ session });
+        
+        result = {
+          success: true,
+          assignmentId: assignment._id,
+          rep: {
+            id: rep._id,
+            name: rep.name,
+            hubspot_owner_id: rep.hubspot_owner_id
+          },
+          queue,
+          assignedAt: assignment.assigned_at,
+          isManual: true
+        };
       });
+      
+      res.json(result);
     } catch (error) {
-      await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      await session.endSession();
     }
   } catch (error) {
     console.error('Manual assignment error:', error);
@@ -165,63 +157,54 @@ router.post('/record-manual', requireBDR, async (req, res) => {
       return res.status(400).json({ error: 'count must be a positive number' });
     }
     
-    const pool = require('../db');
-    const client = await pool.connect();
+    const session = await mongoose.startSession();
+    let result;
     
     try {
-      await client.query('BEGIN');
-      
-      // Find rep by name (case-insensitive)
-      const repCheck = await client.query(
-        'SELECT id, name, hubspot_owner_id FROM reps WHERE LOWER(name) = LOWER($1) AND queue = $2',
-        [repName.trim(), queue]
-      );
-      
-      if (repCheck.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(404).json({ error: `Rep "${repName}" not found in ${queue} queue` });
-      }
-      
-      const rep = repCheck.rows[0];
-      
-      // Create multiple manual assignment records
-      const assignmentIds = [];
-      for (let i = 0; i < countNum; i++) {
-        const assignmentResult = await client.query(`
-          INSERT INTO assignments (
-            rep_id, queue, assigned_by, is_manual, is_company_match
-          )
-          VALUES ($1, $2, $3, $4, $5)
-          RETURNING id, assigned_at
-        `, [
-          rep.id,
+      await session.withTransaction(async () => {
+        // Find rep by name (case-insensitive)
+        const rep = await Rep.findOne({
+          name: { $regex: new RegExp(`^${repName.trim()}$`, 'i') },
+          queue
+        }).session(session);
+        
+        if (!rep) {
+          throw new Error(`Rep "${repName}" not found in ${queue} queue`);
+        }
+        
+        // Create multiple manual assignment records
+        const assignments = [];
+        for (let i = 0; i < countNum; i++) {
+          assignments.push({
+            rep_id: rep._id,
+            queue,
+            assigned_by: req.user.id,
+            is_manual: true,
+            is_company_match: false
+          });
+        }
+        
+        const created = await Assignment.insertMany(assignments, { session });
+        
+        result = {
+          success: true,
+          assignmentIds: created.map(a => a._id),
+          rep: {
+            id: rep._id,
+            name: rep.name,
+            hubspot_owner_id: rep.hubspot_owner_id
+          },
           queue,
-          req.user.id,
-          true, // is_manual
-          false // is_company_match
-        ]);
-        assignmentIds.push(assignmentResult.rows[0].id);
-      }
-      
-      await client.query('COMMIT');
-      
-      res.json({
-        success: true,
-        assignmentIds,
-        rep: {
-          id: rep.id,
-          name: rep.name,
-          hubspot_owner_id: rep.hubspot_owner_id
-        },
-        queue,
-        count: countNum,
-        message: `Successfully recorded ${countNum} manual assignment(s) for ${rep.name}`
+          count: countNum,
+          message: `Successfully recorded ${countNum} manual assignment(s) for ${rep.name}`
+        };
       });
+      
+      res.json(result);
     } catch (error) {
-      await client.query('ROLLBACK');
       throw error;
     } finally {
-      client.release();
+      await session.endSession();
     }
   } catch (error) {
     console.error('Record manual assignment error:', error);
@@ -236,7 +219,6 @@ router.post('/record-manual', requireBDR, async (req, res) => {
 router.get('/dashboard-stats', requireBDR, async (req, res) => {
   try {
     const { fromDate, toDate } = req.query;
-    const pool = require('../db');
     
     // Validate date format (YYYY-MM-DD)
     const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
@@ -247,108 +229,120 @@ router.get('/dashboard-stats', requireBDR, async (req, res) => {
       return res.status(400).json({ error: 'Invalid toDate format. Use YYYY-MM-DD' });
     }
     
-    // Build date filter with parameterized queries
-    let dateFilterClause = '';
-    const dateParams = [];
-    let paramCount = 1;
-    
-    if (fromDate && toDate) {
-      dateFilterClause = `AND assigned_at >= $${paramCount}::date AND assigned_at <= $${paramCount + 1}::date + INTERVAL '1 day'`;
-      dateParams.push(fromDate, toDate);
-      paramCount += 2;
-    } else if (fromDate) {
-      dateFilterClause = `AND assigned_at >= $${paramCount}::date`;
-      dateParams.push(fromDate);
-      paramCount += 1;
-    } else if (toDate) {
-      dateFilterClause = `AND assigned_at <= $${paramCount}::date + INTERVAL '1 day'`;
-      dateParams.push(toDate);
-      paramCount += 1;
+    // Build date filter
+    const dateFilter = {};
+    if (fromDate || toDate) {
+      dateFilter.assigned_at = {};
+      if (fromDate) {
+        dateFilter.assigned_at.$gte = new Date(fromDate);
+      }
+      if (toDate) {
+        const toDateEnd = new Date(toDate);
+        toDateEnd.setHours(23, 59, 59, 999);
+        dateFilter.assigned_at.$lte = toDateEnd;
+      }
     }
     
-    const smbStats = await pool.query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE is_manual = false AND is_company_match = false) as round_robin,
-        COUNT(*) FILTER (WHERE is_manual = true) as manual,
-        COUNT(*) FILTER (WHERE is_company_match = true) as company_match,
-        COUNT(*) as total,
-        COUNT(*) FILTER (WHERE assigned_at > NOW() - INTERVAL '24 hours') as today,
-        COUNT(*) FILTER (WHERE assigned_at > NOW() - INTERVAL '7 days') as week
-      FROM assignments
-      WHERE queue = 'SMB' ${dateFilterClause}
-    `, dateParams);
+    // Get SMB stats
+    const smbFilter = { queue: 'SMB', ...dateFilter };
+    const smbStats = await Assignment.aggregate([
+      { $match: smbFilter },
+      {
+        $group: {
+          _id: null,
+          round_robin: {
+            $sum: { $cond: [{ $and: [{ $eq: ['$is_manual', false] }, { $eq: ['$is_company_match', false] }] }, 1, 0] }
+          },
+          manual: { $sum: { $cond: [{ $eq: ['$is_manual', true] }, 1, 0] } },
+          company_match: { $sum: { $cond: [{ $eq: ['$is_company_match', true] }, 1, 0] } },
+          total: { $sum: 1 }
+        }
+      }
+    ]);
     
-    const entStats = await pool.query(`
-      SELECT 
-        COUNT(*) FILTER (WHERE is_manual = false AND is_company_match = false) as round_robin,
-        COUNT(*) FILTER (WHERE is_manual = true) as manual,
-        COUNT(*) FILTER (WHERE is_company_match = true) as company_match,
-        COUNT(*) as total,
-        COUNT(*) FILTER (WHERE assigned_at > NOW() - INTERVAL '24 hours') as today,
-        COUNT(*) FILTER (WHERE assigned_at > NOW() - INTERVAL '7 days') as week
-      FROM assignments
-      WHERE queue = 'ENT' ${dateFilterClause}
-    `, dateParams);
+    const now = new Date();
+    const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     
-    // Get rep breakdown for charts (include inactive reps) - using parameterized queries
-    let repDateFilter = '';
-    const repDateParams = [];
-    let repParamCount = 1;
+    const smbToday = await Assignment.countDocuments({ queue: 'SMB', assigned_at: { $gte: oneDayAgo }, ...dateFilter });
+    const smbWeek = await Assignment.countDocuments({ queue: 'SMB', assigned_at: { $gte: oneWeekAgo }, ...dateFilter });
     
-    if (fromDate && toDate) {
-      repDateFilter = `AND a.assigned_at >= $${repParamCount}::date AND a.assigned_at <= $${repParamCount + 1}::date + INTERVAL '1 day'`;
-      repDateParams.push(fromDate, toDate);
-      repParamCount += 2;
-    } else if (fromDate) {
-      repDateFilter = `AND a.assigned_at >= $${repParamCount}::date`;
-      repDateParams.push(fromDate);
-      repParamCount += 1;
-    } else if (toDate) {
-      repDateFilter = `AND a.assigned_at <= $${repParamCount}::date + INTERVAL '1 day'`;
-      repDateParams.push(toDate);
-      repParamCount += 1;
-    }
+    // Get ENT stats
+    const entFilter = { queue: 'ENT', ...dateFilter };
+    const entStats = await Assignment.aggregate([
+      { $match: entFilter },
+      {
+        $group: {
+          _id: null,
+          round_robin: {
+            $sum: { $cond: [{ $and: [{ $eq: ['$is_manual', false] }, { $eq: ['$is_company_match', false] }] }, 1, 0] }
+          },
+          manual: { $sum: { $cond: [{ $eq: ['$is_manual', true] }, 1, 0] } },
+          company_match: { $sum: { $cond: [{ $eq: ['$is_company_match', true] }, 1, 0] } },
+          total: { $sum: 1 }
+        }
+      }
+    ]);
     
-    const smbRepBreakdown = await pool.query(`
-      SELECT 
-        r.name,
-        r.active,
-        COUNT(a.id) as count
-      FROM reps r
-      LEFT JOIN assignments a ON r.id = a.rep_id AND a.queue = 'SMB' ${repDateFilter}
-      WHERE r.queue = 'SMB'
-      GROUP BY r.id, r.name, r.active
-      ORDER BY r.active DESC, count DESC, r.name
-    `, repDateParams);
+    const entToday = await Assignment.countDocuments({ queue: 'ENT', assigned_at: { $gte: oneDayAgo }, ...dateFilter });
+    const entWeek = await Assignment.countDocuments({ queue: 'ENT', assigned_at: { $gte: oneWeekAgo }, ...dateFilter });
     
-    const entRepBreakdown = await pool.query(`
-      SELECT 
-        r.name,
-        r.active,
-        COUNT(a.id) as count
-      FROM reps r
-      LEFT JOIN assignments a ON r.id = a.rep_id AND a.queue = 'ENT' ${repDateFilter}
-      WHERE r.queue = 'ENT'
-      GROUP BY r.id, r.name, r.active
-      ORDER BY r.active DESC, count DESC, r.name
-    `, repDateParams);
+    // Get rep breakdown
+    const smbReps = await Rep.find({ queue: 'SMB' }).lean();
+    const entReps = await Rep.find({ queue: 'ENT' }).lean();
+    
+    const smbRepBreakdown = await Promise.all(smbReps.map(async (rep) => {
+      const count = await Assignment.countDocuments({
+        rep_id: rep._id,
+        queue: 'SMB',
+        ...dateFilter
+      });
+      return {
+        name: rep.name,
+        active: rep.active,
+        count
+      };
+    }));
+    
+    const entRepBreakdown = await Promise.all(entReps.map(async (rep) => {
+      const count = await Assignment.countDocuments({
+        rep_id: rep._id,
+        queue: 'ENT',
+        ...dateFilter
+      });
+      return {
+        name: rep.name,
+        active: rep.active,
+        count
+      };
+    }));
     
     res.json({
       smb: {
-        ...smbStats.rows[0],
-        repBreakdown: smbRepBreakdown.rows.map(r => ({
-          name: r.name,
-          count: parseInt(r.count || 0),
-          active: r.active
-        }))
+        round_robin: smbStats[0]?.round_robin || 0,
+        manual: smbStats[0]?.manual || 0,
+        company_match: smbStats[0]?.company_match || 0,
+        total: smbStats[0]?.total || 0,
+        today: smbToday,
+        week: smbWeek,
+        repBreakdown: smbRepBreakdown.sort((a, b) => {
+          if (a.active !== b.active) return b.active - a.active;
+          if (b.count !== a.count) return b.count - a.count;
+          return a.name.localeCompare(b.name);
+        })
       },
       ent: {
-        ...entStats.rows[0],
-        repBreakdown: entRepBreakdown.rows.map(r => ({
-          name: r.name,
-          count: parseInt(r.count || 0),
-          active: r.active
-        }))
+        round_robin: entStats[0]?.round_robin || 0,
+        manual: entStats[0]?.manual || 0,
+        company_match: entStats[0]?.company_match || 0,
+        total: entStats[0]?.total || 0,
+        today: entToday,
+        week: entWeek,
+        repBreakdown: entRepBreakdown.sort((a, b) => {
+          if (a.active !== b.active) return b.active - a.active;
+          if (b.count !== a.count) return b.count - a.count;
+          return a.name.localeCompare(b.name);
+        })
       }
     });
   } catch (error) {
@@ -385,57 +379,31 @@ router.get('/', async (req, res) => {
   try {
     const { queue, rep_id, limit = 100, offset = 0 } = req.query;
     
-    let query = `
-      SELECT 
-        a.id,
-        a.rep_id,
-        r.name as rep_name,
-        a.queue,
-        a.hubspot_contact_id,
-        a.hubspot_deal_id,
-        a.assigned_at,
-        a.score_at_assignment,
-        a.weight_at_assignment,
-        a.metadata,
-        u.name as assigned_by_name
-      FROM assignments a
-      JOIN reps r ON a.rep_id = r.id
-      LEFT JOIN users u ON a.assigned_by = u.id
-      WHERE 1=1
-    `;
+    const query = {};
+    if (queue) query.queue = queue;
+    if (rep_id) query.rep_id = rep_id;
     
-    const params = [];
-    let paramCount = 1;
-    
-    if (queue) {
-      query += ` AND a.queue = $${paramCount++}`;
-      params.push(queue);
-    }
-    
-    if (rep_id) {
-      query += ` AND a.rep_id = $${paramCount++}`;
-      params.push(rep_id);
-    }
-    
-    query += ` ORDER BY a.assigned_at DESC LIMIT $${paramCount++} OFFSET $${paramCount++}`;
-    params.push(parseInt(limit), parseInt(offset));
-    
-    const pool = require('../db');
-    const result = await pool.query(query, params);
+    const assignments = await Assignment.find(query)
+      .populate('rep_id', 'name')
+      .populate('assigned_by', 'name')
+      .sort({ assigned_at: -1 })
+      .limit(parseInt(limit))
+      .skip(parseInt(offset))
+      .lean();
     
     res.json({
-      assignments: result.rows.map(row => ({
-        id: row.id,
-        repId: row.rep_id,
-        repName: row.rep_name,
-        queue: row.queue,
-        hubspotContactId: row.hubspot_contact_id,
-        hubspotDealId: row.hubspot_deal_id,
-        assignedAt: row.assigned_at,
-        scoreAtAssignment: parseFloat(row.score_at_assignment),
-        weightAtAssignment: parseFloat(row.weight_at_assignment),
-        metadata: row.metadata,
-        assignedByName: row.assigned_by_name
+      assignments: assignments.map(a => ({
+        id: a._id,
+        repId: a.rep_id?._id || a.rep_id,
+        repName: a.rep_id?.name || 'Unknown',
+        queue: a.queue,
+        hubspotContactId: a.hubspot_contact_id,
+        hubspotDealId: a.hubspot_deal_id,
+        assignedAt: a.assigned_at,
+        scoreAtAssignment: a.score_at_assignment,
+        weightAtAssignment: a.weight_at_assignment,
+        metadata: a.metadata,
+        assignedByName: a.assigned_by?.name || null
       })),
       limit: parseInt(limit),
       offset: parseInt(offset)
@@ -447,4 +415,3 @@ router.get('/', async (req, res) => {
 });
 
 module.exports = router;
-

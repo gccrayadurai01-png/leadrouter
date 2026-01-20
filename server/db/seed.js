@@ -4,36 +4,42 @@
  */
 
 require('dotenv').config();
-const { Pool } = require('pg');
+const mongoose = require('./index');
 const bcrypt = require('bcryptjs');
 
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'leadrouter',
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-});
+// Import models
+const User = require('./models/User');
+const Rep = require('./models/Rep');
+const RepScore = require('./models/RepScore');
 
 async function seed() {
-  const client = await pool.connect();
-  
   try {
+    // Wait for MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      await new Promise((resolve) => {
+        mongoose.connection.once('connected', resolve);
+      });
+    }
+    
     console.log('Starting database seed...');
-    await client.query('BEGIN');
     
     // Create admin user
     const adminPassword = process.env.ADMIN_PASSWORD || 'admin123';
     const adminHash = await bcrypt.hash(adminPassword, 10);
     
-    const adminResult = await client.query(`
-      INSERT INTO users (email, password_hash, role, name)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (email) DO NOTHING
-      RETURNING id, email, role
-    `, ['admin@leadrouter.com', adminHash, 'admin', 'Admin User']);
+    const adminUser = await User.findOneAndUpdate(
+      { email: 'admin@leadrouter.com' },
+      {
+        email: 'admin@leadrouter.com',
+        password_hash: adminHash,
+        role: 'admin',
+        name: 'Admin User',
+        active: true
+      },
+      { upsert: true, new: true }
+    );
     
-    if (adminResult.rows.length > 0) {
+    if (adminUser.isNew) {
       console.log('✅ Created admin user: admin@leadrouter.com');
       console.log('   Password: admin123 (change this in production!)');
     } else {
@@ -44,14 +50,19 @@ async function seed() {
     const bdrPassword = process.env.BDR_PASSWORD || 'bdr123';
     const bdrHash = await bcrypt.hash(bdrPassword, 10);
     
-    const bdrResult = await client.query(`
-      INSERT INTO users (email, password_hash, role, name)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (email) DO NOTHING
-      RETURNING id, email, role
-    `, ['bdr@leadrouter.com', bdrHash, 'bdr', 'BDR User']);
+    const bdrUser = await User.findOneAndUpdate(
+      { email: 'bdr@leadrouter.com' },
+      {
+        email: 'bdr@leadrouter.com',
+        password_hash: bdrHash,
+        role: 'bdr',
+        name: 'BDR User',
+        active: true
+      },
+      { upsert: true, new: true }
+    );
     
-    if (bdrResult.rows.length > 0) {
+    if (bdrUser.isNew) {
       console.log('✅ Created BDR user: bdr@leadrouter.com');
       console.log('   Password: bdr123 (change this in production!)');
     } else {
@@ -59,8 +70,8 @@ async function seed() {
     }
     
     // Create sample reps (optional - only if none exist)
-    const repCount = await client.query('SELECT COUNT(*) FROM reps');
-    if (parseInt(repCount.rows[0].count) === 0) {
+    const repCount = await Rep.countDocuments();
+    if (repCount === 0) {
       console.log('Creating sample reps...');
       
       const sampleReps = [
@@ -70,11 +81,17 @@ async function seed() {
         { name: 'Alice Williams', email: 'alice@example.com', queue: 'ENT', weight: 1.8, hubspot_owner_id: '12345681' },
       ];
       
-      for (const rep of sampleReps) {
-        await client.query(`
-          INSERT INTO reps (name, email, queue, weight, hubspot_owner_id)
-          VALUES ($1, $2, $3, $4, $5)
-        `, [rep.name, rep.email, rep.queue, rep.weight, rep.hubspot_owner_id]);
+      for (const repData of sampleReps) {
+        const rep = new Rep(repData);
+        await rep.save();
+        
+        // Initialize score
+        const repScore = new RepScore({
+          rep_id: rep._id,
+          queue: rep.queue,
+          current_score: 0.0
+        });
+        await repScore.save();
       }
       
       console.log(`✅ Created ${sampleReps.length} sample reps`);
@@ -82,15 +99,12 @@ async function seed() {
       console.log('ℹ️  Reps already exist, skipping sample data');
     }
     
-    await client.query('COMMIT');
     console.log('✅ Database seed completed successfully!');
   } catch (error) {
-    await client.query('ROLLBACK');
     console.error('❌ Seed failed:', error);
     throw error;
   } finally {
-    client.release();
-    await pool.end();
+    await mongoose.connection.close();
   }
 }
 
@@ -104,4 +118,3 @@ if (require.main === module) {
 }
 
 module.exports = { seed };
-

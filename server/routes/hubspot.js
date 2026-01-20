@@ -5,7 +5,7 @@
 
 const express = require('express');
 const { authenticate, requireAdmin } = require('../middleware/auth');
-const pool = require('../db');
+const HubSpotSync = require('../db/models/HubSpotSync');
 const { Client } = require('@hubspot/api-client');
 
 const router = express.Router();
@@ -40,21 +40,19 @@ router.get('/callback', async (req, res) => {
       return res.status(400).json({ error: tokens.error_description || 'OAuth error' });
     }
 
-    // Store tokens in database (upsert by hubspot_account_id or just insert new)
-    await pool.query(`
-      INSERT INTO hubspot_sync (access_token, refresh_token, expires_at, hubspot_account_id)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (hubspot_account_id) DO UPDATE SET
-        access_token = $1,
-        refresh_token = $2,
-        expires_at = $3,
-        updated_at = CURRENT_TIMESTAMP
-    `, [
-      tokens.access_token,
-      tokens.refresh_token,
-      new Date(Date.now() + tokens.expires_in * 1000),
-      tokens.hub_id || null
-    ]);
+    // Store tokens in database (upsert by hubspot_account_id)
+    const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
+    
+    await HubSpotSync.findOneAndUpdate(
+      { hubspot_account_id: tokens.hub_id || null },
+      {
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: expiresAt,
+        hubspot_account_id: tokens.hub_id || null
+      },
+      { upsert: true, new: true }
+    );
 
     res.redirect('/admin?hubspot=connected');
   } catch (error) {
@@ -72,26 +70,21 @@ router.get('/auth-url', authenticate, requireAdmin, (req, res) => {
 // Get HubSpot connection status (Admin only)
 router.get('/status', authenticate, requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT 
-        access_token IS NOT NULL as connected,
-        expires_at,
-        last_sync_at,
-        sync_status
-      FROM hubspot_sync
-      ORDER BY created_at DESC
-      LIMIT 1
-    `);
+    const sync = await HubSpotSync.findOne({
+      access_token: { $ne: null }
+    })
+    .sort({ createdAt: -1 })
+    .lean();
 
-    if (result.rows.length === 0) {
+    if (!sync) {
       return res.json({ connected: false });
     }
 
     res.json({
-      connected: result.rows[0].connected,
-      expiresAt: result.rows[0].expires_at,
-      lastSyncAt: result.rows[0].last_sync_at,
-      syncStatus: result.rows[0].sync_status
+      connected: !!sync.access_token,
+      expiresAt: sync.expires_at,
+      lastSyncAt: sync.last_sync_at,
+      syncStatus: sync.sync_status
     });
   } catch (error) {
     console.error('HubSpot status error:', error);
@@ -102,20 +95,18 @@ router.get('/status', authenticate, requireAdmin, async (req, res) => {
 // Sync assignment to HubSpot
 async function syncAssignmentToHubSpot(assignment, rep) {
   try {
-    const result = await pool.query(`
-      SELECT access_token, expires_at
-      FROM hubspot_sync
-      WHERE access_token IS NOT NULL
-      ORDER BY created_at DESC
-      LIMIT 1
-    `);
+    const sync = await HubSpotSync.findOne({
+      access_token: { $ne: null }
+    })
+    .sort({ createdAt: -1 })
+    .lean();
 
-    if (result.rows.length === 0 || !result.rows[0].access_token) {
+    if (!sync || !sync.access_token) {
       console.log('HubSpot not connected');
       return { success: false, error: 'HubSpot not connected' };
     }
 
-    const { access_token, expires_at } = result.rows[0];
+    const { access_token, expires_at } = sync;
 
     // Check if token is expired
     if (new Date(expires_at) < new Date()) {
@@ -148,31 +139,29 @@ async function syncAssignmentToHubSpot(assignment, rep) {
     }
 
     // Update sync status
-    await pool.query(`
-      UPDATE hubspot_sync
-      SET last_sync_at = CURRENT_TIMESTAMP, sync_status = 'success'
-      WHERE access_token = $1
-    `, [access_token]);
+    await HubSpotSync.findByIdAndUpdate(sync._id, {
+      last_sync_at: new Date(),
+      sync_status: 'success'
+    });
 
     return { success: true };
   } catch (error) {
     console.error('HubSpot sync error:', error);
     
     // Update sync status
-    await pool.query(`
-      UPDATE hubspot_sync
-      SET sync_status = 'error'
-      WHERE access_token = (
-        SELECT access_token FROM hubspot_sync
-        WHERE access_token IS NOT NULL
-        ORDER BY created_at DESC
-        LIMIT 1
-      )
-    `);
+    const sync = await HubSpotSync.findOne({
+      access_token: { $ne: null }
+    })
+    .sort({ createdAt: -1 });
+    
+    if (sync) {
+      await HubSpotSync.findByIdAndUpdate(sync._id, {
+        sync_status: 'error'
+      });
+    }
 
     return { success: false, error: error.message };
   }
 }
 
 module.exports = { router, syncAssignmentToHubSpot };
-

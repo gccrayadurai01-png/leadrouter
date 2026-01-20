@@ -1,33 +1,46 @@
 /**
- * Test Database Connection
+ * Test MongoDB Connection
  */
 
 require('dotenv').config();
-const { Client } = require('pg');
+const mongoose = require('mongoose');
 
-console.log('Testing database connection...');
-console.log('Host:', process.env.DB_HOST || 'localhost');
-console.log('Port:', process.env.DB_PORT || 5432);
-console.log('User:', process.env.DB_USER || 'postgres');
-console.log('Password:', process.env.DB_PASSWORD ? '***' + process.env.DB_PASSWORD.slice(-2) : 'not set');
+console.log('Testing MongoDB connection...');
+
+// Get connection string
+const getConnectionString = () => {
+  if (process.env.MONGODB_URI) {
+    return process.env.MONGODB_URI;
+  }
+  
+  const host = process.env.DB_HOST || 'localhost';
+  const port = process.env.DB_PORT || 27017;
+  const database = process.env.DB_NAME || 'leadrouter';
+  const user = process.env.DB_USER || '';
+  const password = process.env.DB_PASSWORD || '';
+  
+  if (user && password) {
+    return `mongodb://${user}:${password}@${host}:${port}/${database}?authSource=admin`;
+  }
+  
+  return `mongodb://${host}:${port}/${database}`;
+};
+
+const connectionString = getConnectionString();
+const maskedUri = connectionString.replace(/:[^:@]+@/, ':****@');
+
+console.log('Connection String:', maskedUri);
 console.log('');
 
-const client = new Client({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  user: process.env.DB_USER || 'postgres',
-  password: process.env.DB_PASSWORD || 'postgres',
-  database: 'postgres'
-});
-
-client.connect()
+mongoose.connect(connectionString, {
+  serverSelectionTimeoutMS: 5000,
+})
   .then(() => {
-    console.log('✅ Successfully connected to PostgreSQL!');
-    return client.query('SELECT version()');
-  })
-  .then((result) => {
-    console.log('PostgreSQL version:', result.rows[0].version.split(' ')[0] + ' ' + result.rows[0].version.split(' ')[1]);
-    client.end();
+    console.log('✅ Successfully connected to MongoDB!');
+    console.log('Database:', mongoose.connection.db.databaseName);
+    console.log('Host:', mongoose.connection.host);
+    console.log('Port:', mongoose.connection.port);
+    mongoose.connection.close();
     process.exit(0);
   })
   .catch((error) => {
@@ -35,11 +48,10 @@ client.connect()
     console.error('Error:', error.message);
     console.error('');
     console.error('Possible issues:');
-    console.error('  1. Password is incorrect');
-    console.error('  2. PostgreSQL service is not running');
-    console.error('  3. Port 5432 is blocked');
-    console.error('  4. User does not exist');
-    client.end();
+    console.error('  1. MONGODB_URI is incorrect');
+    console.error('  2. MongoDB service is not running');
+    console.error('  3. Network/firewall blocking connection');
+    console.error('  4. Authentication credentials are incorrect');
+    console.error('  5. IP address not whitelisted (for MongoDB Atlas)');
     process.exit(1);
   });
-
