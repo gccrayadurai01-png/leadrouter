@@ -30,11 +30,16 @@ export function AuthProvider({ children }) {
       setUser(response.data.user);
       setLoading(false);
     } catch (error) {
+      // Token is invalid or expired - clear everything
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       delete axios.defaults.headers.common['Authorization'];
       setUser(null);
       setLoading(false);
+      // Redirect to login if we're not already there
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
     }
   };
 
@@ -47,16 +52,8 @@ export function AuthProvider({ children }) {
       // Set axios header with existing token
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       
-      // Try to set user from localStorage immediately (optimistic)
-      if (savedUser) {
-        try {
-          const parsedUser = JSON.parse(savedUser);
-          setUser(parsedUser);
-        } catch (e) {
-          // Invalid saved user, clear it
-          localStorage.removeItem('user');
-        }
-      }
+      // Don't set user optimistically - wait for API verification
+      // This prevents showing dashboard with invalid/expired tokens
       
       // Verify token is still valid by fetching user
       fetchUser();
